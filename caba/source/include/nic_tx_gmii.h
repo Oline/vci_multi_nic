@@ -1,4 +1,4 @@
-/* -*- c++ -*-
+è/* -*- c++ -*-
  *
  * SOCLIB_LGPL_HEADER_BEGIN
  *
@@ -69,7 +69,7 @@ class NicTxGmii
     ///////////////////////////////////////////////////////////////////
     void write_one_packet()
     {
-        //        assert( false and "function write_paket of GMII_TX not defined");
+        //assert( false and "function write_paket of GMII_TX not defined");
     }
 
 public:

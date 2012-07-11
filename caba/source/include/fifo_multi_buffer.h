@@ -114,9 +114,13 @@ public:
     {
         r_ptr          = 0;             
         r_ptw          = 0;
-        r_sts          = 0;
+        r_sts          = 32;  // Because STS checks start from the MAX buffers number value
         r_ptw_buf_save = 0;
         r_word_count   = 0;
+        for ( size_t x=0 ; x<m_buffers ; x++)
+        {
+            r_eop[x]=0;
+        }
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -136,30 +140,61 @@ public:
         // WCMD registers update (depends only on cmd_w)
         if ( cmd_w == FIFO_MULTI_WCMD_WRITE )       // write one word 
         {
+            /*printf("\n***** STATUS FIFO MULTI IN WCMD = WRITE *****\n");
+            printf("fifo_multi : r_ptw = %d\n",r_ptw);
+            printf("fifo_multi : r_word_count = %d\n",r_word_count);
+            printf("fifo_multi : r_sts = %d\n",r_sts);
+            printf("fifo_multi : ptw_word = %d\n",ptw_word);*/
             r_buf[r_ptw]               = dtin;
             r_word_count               = r_word_count + 1;
             r_ptw                      = (r_ptw + 1) % (m_buffers * m_words);
-            if ( ptw_word == 0)  r_sts = r_sts - 1; 
+            if ( ptw_word == 0)
+                r_sts = r_sts - 1; 
+            /*printf("\n** STATUS FIFO MULTI after WRITE **\n");
+            printf("fifo_multi : r_ptw = %d\n",r_ptw);
+            printf("fifo_multi : r_word_count = %d\n",r_word_count);
+            printf("fifo_multi : r_sts = %d\n",r_sts);
+            printf("fifo_multi : ptw_word = %d\n\n",ptw_word);*/
         }
         else if ( cmd_w == FIFO_MULTI_WCMD_LAST )  // write last word
         {
-            r_buf[r_ptw]               = dtin << padding;
-            r_plen[r_ptw_buf_save]     = r_word_count<<2 + 4 - padding;
+            //printf("\n***** STATUS FIFO MULTI IN WCMD = WRITE LAST *****\n");
+            r_buf[r_ptw]               = dtin;
+            r_plen[r_ptw_buf_save]     = (r_word_count<<2) + 4 - padding;
+            //printf("fifo_multi : plen = %x\n",r_plen[r_ptw_buf_save]);
             r_eop[ptw_buf]             = true;
+            //printf("fifo_multi : ptw_buf = %x\n",ptw_buf);
             r_ptw_buf_save             = (ptw_buf + 1) % m_buffers;
             r_word_count               = 0;
             r_ptw                      = ((ptw_buf + 1) % m_buffers) * m_words;
-            if ( ptw_word == 0)  r_sts = r_sts - 1; 
+            if ( ptw_word == 0)
+                r_sts = r_sts - 1; 
+            //printf("fifo_multi : r_ptw = %x\n",r_ptw);
+            //printf("fifo_multi : r_word_count = %x\n",r_word_count);
+            //printf("fifo_multi : r_sts = %x\n",r_sts);
+            //printf("fifo_multi : padding = %x\n",padding);
+            //printf("fifo_multi : ptw_word = %x\n",ptw_word);
         }
         else if ( cmd_w == FIFO_MULTI_WCMD_CLEAR ) // clear the current packet
         {
+            /*printf("\n***** STATUS FIFO MULTI IN WCMD = WCLEAR *****\n");
+            printf("r_sts : %d\n",r_sts);
+            printf("r_ptw : %d\n",r_ptw);
+            printf("ptw_buf : %d\n",ptw_buf);
+            printf("r_word_count : %d\n",r_word_count);*/
             uint32_t first_buf = r_ptw_buf_save;
+            //printf("first buf : %d\n",first_buf);
             uint32_t nbuf;
-            if ( ptw_buf >= first_buf ) nbuf = ptw_buf - first_buf;
-            else                        nbuf = (ptw_buf + m_buffers) - first_buf;
+            if ( ptw_buf >= first_buf ) nbuf = ptw_buf - first_buf + 1;
+            else                        nbuf = (ptw_buf + m_buffers) - first_buf + 1;
+            //printf("nbuf : %d\n",nbuf);
             r_ptw                      = r_ptw_buf_save * m_words;
             r_word_count               = 0;
-            r_sts                      = r_sts + nbuf;
+            r_sts                      = r_sts + nbuf ;
+            /*printf("r_sts : %d\n",r_sts);
+            printf("r_ptw : %d\n",r_ptw);
+            printf("ptw_buf : %d\n",ptw_buf);
+            printf("r_word_count : %d\n\n",r_word_count);*/
         }
 
         // RCMD registers update (depends only on cmd_r)
@@ -176,12 +211,21 @@ public:
         }
         else if ( cmd_r == FIFO_MULTI_RCMD_SKIP ) // skip one packet
         {
+            //printf("ptr_buf = %d\n",ptr_buf);
+            //printf("r_sts before skip = %d\n",r_sts);
+            //printf("r_ptr = %d\n",r_ptr);
             uint32_t plen     = r_plen[ptr_buf];
-            uint32_t last_ptr = (r_ptr + plen - 4) % (m_buffers * m_words);
+            //printf("plen = %d\n",plen);
+            uint32_t last_ptr = (r_ptr + ((plen - 4)>>2)) % (m_buffers * m_words);
+            //printf("last_ptr = %d\n",last_ptr);
             uint32_t last_buf = last_ptr >> m_word_shift;
+            //printf("last_buf = %d\n",last_buf);
             r_eop[last_buf]   = false;
+            //printf("r_eop is : %d\n",r_eop[last_buf]);
             r_ptr             = ((last_buf + 1) % m_buffers) * m_words;
-            r_sts             = r_sts + 1 + (plen / m_words);
+            //printf("r_ptr = %d\n",r_ptr);
+            r_sts             = r_sts + 1 + ((plen>>2) / m_words);
+            //printf("r_sts = %d\n",r_sts);
         }
     } // end update()
 
@@ -212,7 +256,11 @@ public:
     {
         for ( size_t x=0 ; x<m_buffers ; x++)
         {
-            if ( r_eop[x] ) return true;
+            if ( r_eop[x] ) 
+            {
+                //printf("le buff du reop est : %d\n",x);
+                return true; 
+            }
         }
         return false;
     }
@@ -223,7 +271,7 @@ public:
     //////////////////////////////////////////////////////////////
     bool wok()
     {
-        return (r_sts < m_buffers);
+        return (r_sts > 0);
     }
 
     //////////////////////////////////////////////////////////////

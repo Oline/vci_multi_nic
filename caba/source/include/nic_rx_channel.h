@@ -22,6 +22,7 @@
  *
  * Copyright (c) UPMC, Lip6
  *         Alain Greiner <alain.greiner@lip6.fr> July 2012
+ *         Clement Devigne <clement.devigne@lip6.fr>
  *         Sylvain Leroy <sylvain.leroy@lip6.fr>
  *         
  *
@@ -144,7 +145,6 @@ public:
         // WCMD registers update (depends only on cmd_w)
         uint32_t    k = r_ptw_cont;
 
-        //////////////////////////////////////////////////////////////////////////
         if ( cmd_w == RX_CHANNEL_WCMD_WRITE )      // write one packet word
             {
                 assert( (r_ptw_word < 1024) and 
@@ -153,6 +153,7 @@ public:
                 if ( r_sts < 2 )    // at least one empty container
                     {
                         r_cont[k][r_ptw_word]    = wdata;
+                        //printf("VALEUR de data  : %x\n",r_cont[k][r_ptw_word]);
                         r_ptw_word               = r_ptw_word + 1;
                         r_pkt_length             = r_pkt_length + 4;
                     }
@@ -163,7 +164,7 @@ public:
             }
         //////////////////////////////////////////////////////////////////////////
         else if ( cmd_w == RX_CHANNEL_WCMD_LAST )  // write last word in a packet
-                                                   // and write packet length
+            // and write packet length
             {
                 assert( (r_ptw_word < 1024) and 
                         "ERROR in NIC_RX_CHANNEL : write pointer overflow" );
@@ -175,7 +176,7 @@ public:
                     {
                         uint32_t    plen         = r_pkt_length + 4 - padding;
                         bool        odd          = (r_pkt_index & 0x1);
-                        uint32_t    word         = (r_pkt_index / 2) + 1;
+                        uint32_t    word         = (r_pkt_index >> 1) + 1;
 
                         // timer reset if last word
                         // r_timer                  = m_timeout;

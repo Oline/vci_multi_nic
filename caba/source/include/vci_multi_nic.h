@@ -76,28 +76,38 @@ private:
 
     // RX_G2S registers
     sc_signal<int>                          r_rx_g2s_fsm;
-    sc_signal<uint32_t>                     r_rx_g2s_checksum;      // packet checksum
-    sc_signal<uint8_t>                      r_rx_g2s_dt0;           // local data buffer
-    sc_signal<uint8_t>                      r_rx_g2s_dt1;           // local data buffer
-    sc_signal<uint8_t>                      r_rx_g2s_dt2;           // local data buffer
-    sc_signal<uint8_t>                      r_rx_g2s_dt3;           // local data buffer
-    sc_signal<uint8_t>                      r_rx_g2s_dt4;           // local data buffer
-    sc_signal<uint8_t>                      r_rx_g2s_dt5;           // local data buffer
-    sc_signal<size_t>                       r_rx_g2s_delay;         // delay cycle counter
+    sc_signal<uint32_t>                     r_rx_g2s_checksum;                // packet checksum
+    sc_signal<uint8_t>                      r_rx_g2s_dt0;                     // local data buffer
+    sc_signal<uint8_t>                      r_rx_g2s_dt1;                     // local data buffer
+    sc_signal<uint8_t>                      r_rx_g2s_dt2;                     // local data buffer
+    sc_signal<uint8_t>                      r_rx_g2s_dt3;                     // local data buffer
+    sc_signal<uint8_t>                      r_rx_g2s_dt4;                     // local data buffer
+    sc_signal<uint8_t>                      r_rx_g2s_dt5;                     // local data buffer
+    sc_signal<size_t>                       r_rx_g2s_delay;                   // delay cycle counter
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_send;               // packet send counter
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_send_crc_success;   // packet send checksum OK counter
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_send_crc_fail;      // packet send checksum KO counter
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_send_err;           // packet send ERR counter
 
     // RX_DES registers
     sc_signal<int>                          r_rx_des_fsm;
-    sc_signal<uint8_t>*                     r_rx_des_data;          // array[4]
-    sc_signal<size_t>                       r_rx_des_byte_index;    // byte index
-    sc_signal<bool>                         r_rx_des_dirty;         // output fifo modified
+    sc_signal<uint32_t>                     r_rx_des_counter_word;                  // nb words in one packet
+    sc_signal<uint8_t>*                     r_rx_des_data;                          // array[4]
+    sc_signal<size_t>                       r_rx_des_byte_index;                    // byte index
+    sc_signal<bool>                         r_rx_des_dirty;                         // output fifo modified
+    sc_signal<uint32_t>                     r_rx_des_npkt_send_drop_mfifo_full;     // packet send drop cause of mfifo full (counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_send_drop_invplen;        // packet send drop cause of plen not valid (counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_send_write_mfifo_success; // packet write success in mfifo (counter)
 
     // RX_DISPATCH registers
     sc_signal<int>                          r_rx_dispatch_fsm;
-    sc_signal<uint32_t>                     r_rx_dispatch_channel;  // channel index 
-    sc_signal<bool>                         r_rx_dispatch_bp;       // fifo index 
-    sc_signal<uint32_t>                     r_rx_dispatch_plen;     // packet length (bytes)
-    sc_signal<uint32_t>                     r_rx_dispatch_data;     // word value    
-    sc_signal<uint32_t>                     r_rx_dispatch_words;    // write words counter
+    sc_signal<uint32_t>                     r_rx_dispatch_channel;                       // channel index 
+    sc_signal<bool>                         r_rx_dispatch_bp;                            // fifo index 
+    sc_signal<uint32_t>                     r_rx_dispatch_plen;                          // packet length (bytes)
+    sc_signal<uint32_t>                     r_rx_dispatch_data;                          // word value    
+    sc_signal<uint32_t>                     r_rx_dispatch_words;                         // write words counter
+    sc_signal<uint32_t>                     r_rx_dispatch_npkt_send_skip_adrmac_fail;    // packet send skip cause of adrmac false counter
+    sc_signal<uint32_t>                     r_rx_dispatch_npkt_send_wchannel_success;    // packet send write in channel success counter
     
     // TX_DISPATCH registers
     sc_signal<int>                          r_tx_dispatch_fsm;

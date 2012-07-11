@@ -49,9 +49,16 @@
 #include <systemc>
 #include <assert.h>
 
+#include <string>
+#include <iostream>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
+
+
 namespace soclib { 
 namespace caba {
-
+    
 using namespace sc_core;
 
 ////////////////
@@ -60,7 +67,7 @@ class NicRxGmii
     // structure constants
     const std::string   m_name;
     const uint32_t	    m_gap;
-//  const FILE          m_file;
+    std::ifstream       m_file;
 
     // registers
     bool                r_fsm_gap;      // inter_packet state when true
@@ -69,13 +76,53 @@ class NicRxGmii
     uint32_t            r_plen;         // packet length (in bytes)
 
     ///////////////////////////////////////////////////////////////////
+    // This function is used to convert ascii to hexa.
+    ///////////////////////////////////////////////////////////////////
+
+    uint8_t atox (uint8_t el)
+    {
+        if((el >= 48) and (el <= 57))
+            return (el - 48);
+        else if ((el >= 65) and (el <= 70))
+            return ((el - 65)+10);
+        else if((el >= 97) and (el <= 102))
+            return ((el-97)+10);
+        else
+            return -1;
+    }
+    
+    ///////////////////////////////////////////////////////////////////
     // This function is used to read one packet from the input file
     // It must update the r_buffer and the r_plen variables.
     ///////////////////////////////////////////////////////////////////
     void read_one_packet()
     {
-        // assert( false and "function read_paket of GMII_RX not defined");
-        r_plen = 0;
+        if(m_file)
+            {
+                uint32_t cpt = 0;
+                uint32_t data = 0;
+                std::string string;
+                m_file >> r_plen >> string;
+                if(m_file.eof())
+                    {
+                        printf("FIN DU FICHIER\n");
+                        m_file.clear();
+                        m_file.seekg(0, std::ios::beg);
+                        printf("REMISE A ZERO DU FICHIER\n");
+                        m_file >> r_plen >> string;
+                    }
+                //std::cout << std::hex << string << std::endl;
+                for(cpt = 0; cpt < (r_plen << 1) ; cpt++)
+                    {
+                        string[cpt] = atox(string[cpt]);
+                        data = (data << 4)|string[cpt];
+                        if((cpt%2))
+                            {
+                                r_buffer[cpt>>1] = data;
+                                data = 0;
+                            }
+                    }
+            }
     }
 
 public:
@@ -98,33 +145,36 @@ public:
               uint8_t*  dt )         // data value
     {
         if ( r_fsm_gap )    // inter-packet state
-        {
-            *dv = false;
-            *er = false;
-            *dt = 0;
-
-            r_counter = r_counter - 1;
-
-            if (r_counter == 0 ) // end of gap
             {
-                read_one_packet();
-                r_fsm_gap = false;
+                *dv = false;
+                *er = false;
+                *dt = 0;
+
+                r_counter = r_counter - 1;
+
+                if (r_counter == 0 ) // end of gap
+                    {
+                        r_fsm_gap = false;
+                        read_one_packet();
+                    }
             }
-        }
         else    // running packet
-        {
-            *dv = true;
-            *er = false;
-            *dt = r_buffer[r_counter];
-       
-            r_counter = r_counter + 1;
- 
-            if ( r_counter == r_plen ) // end of packet
             {
-                r_counter   = m_gap;
-                r_fsm_gap   = true;
+                *dv = true;
+                *er = false;
+                *dt = r_buffer[r_counter];
+       
+                r_counter = r_counter + 1;
+ 
+                if ( r_counter == r_plen ) // end of packet
+                    {
+                        r_counter   = m_gap;
+                        r_fsm_gap   = true;
+                    }
             }
-        }
+        // printf("valeur de dt : %x\n",*dt);
+        // printf("valeur de dv : %x\n",*dv);
+        // printf("valeur de er : %x\n",*er);
     } // end get()
                 
     //////////////////////////////////////////////////////////////
@@ -133,8 +183,9 @@ public:
     NicRxGmii( const std::string  &name,
                const std::string  &path,
                uint32_t           gap )
-    : m_name(name),
-      m_gap( gap )
+        : m_name(name),
+          m_gap( gap ),
+          m_file(path.c_str())
     {
         r_buffer        = new uint8_t[2048];
     } // end constructor
@@ -145,6 +196,7 @@ public:
     ~NicRxGmii()
     {
         delete [] r_buffer;
+        m_file.close();
     }
 
 }; // end NicRxGmii
