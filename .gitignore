@@ -1,0 +1,7 @@
+*~
+semantic.cache
+*.o
+*.elf
+.svn
+*.o.txt
+*.elf.txt
