@@ -22,7 +22,7 @@
  *
  * Copyright (c) UPMC, Lip6
  *         Alain Greiner <alain.greiner@lip6.fr> July 2012
- *         Clement Devigne <clement.devigne@lip6.fr>
+ *         Clement Devigne <clement.devigne@etu.upmc.fr>
  *         Sylvain Leroy <sylvain.leroy@lip6.fr>
  *         
  *
@@ -308,7 +308,7 @@ public:
     /////////////////////////////////////////////////////////////
     int32_t get_r_timer()
     {
-        return r_timer.read();
+        return r_timer;
     }
 
     //////////////////////////////////////////////////////////////
