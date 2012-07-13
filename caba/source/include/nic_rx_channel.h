@@ -325,8 +325,8 @@ public:
         // Then to be usefull, the timeout must be bigger than 379.
         // Minimal value might be 1024 to be sure that every container can be filled up
         // with a continuous stream.
-        assert((m_timeout < 379)
-               and "ERROR in NIX_RX_CHANNEL : STS overflow");
+        assert((m_timeout > 379)
+               and "ERROR in NIC_RX_CHANNEL : STS overflow");
 
         r_cont    = new uint32_t*[2];
         r_cont[0] = new uint32_t[NIC_CONTAINER_SIZE];
