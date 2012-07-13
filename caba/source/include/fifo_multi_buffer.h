@@ -22,6 +22,7 @@
  *
  * Copyright (c) UPMC, Lip6
  *         Alain Greiner <alain.greiner@lip6.fr> July 2008
+ *         Clement Devigne <clement.devigne@etu.upmc.fr>
  *
  * Maintainers: alain 
  */

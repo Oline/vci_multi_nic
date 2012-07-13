@@ -1,4 +1,4 @@
-è/* -*- c++ -*-
+/* -*- c++ -*-
  *
  * SOCLIB_LGPL_HEADER_BEGIN
  *

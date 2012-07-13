@@ -22,7 +22,7 @@
  *
  * Copyright (c) UPMC, Lip6
  *         Alain Greiner <alain.greiner@lip6.fr> July 2012
- *         Clement Devigne <clement.devigne@lip6.fr>
+ *         Clement Devigne <clement.devigne@etu.upmc.fr>
  *         Sylvain Leroy <sylvain.leroy@lip6.fr>
  *         
  *
@@ -83,8 +83,6 @@ namespace caba {
 
 using namespace sc_core;
 
-#define NIC_CONTAINER_SIZE      1024 // Size in uint32_t
-
 // writer commands
 enum rx_channel_wcmd_t {
     RX_CHANNEL_WCMD_NOP,       // no operation             (channel state not modified)
@@ -144,12 +142,9 @@ public:
                  uint32_t               wdata,      // data to be written
                  uint32_t               padding )   // number of padding bytes
     {
-        uint32_t    container_index = r_ptw_cont; // Container number/index [0,1]
-
-        assert((r_sts <= 2)
-               and "ERROR in NIX_RX_CHANNEL : STS overflow");
-
         // WCMD registers update (depends only on cmd_w)
+        uint32_t    k = r_ptw_cont;
+
         if ( cmd_w == RX_CHANNEL_WCMD_WRITE )      // write one packet word
             {
                 assert( (r_ptw_word < 1024) and 
@@ -157,8 +152,8 @@ public:
 
                 if ( r_sts < 2 )    // at least one empty container
                     {
-                        r_cont[container_index][r_ptw_word]    = wdata;
-                        //printf("VALEUR de data  : %x\n",r_cont[container_index][r_ptw_word]);
+                        r_cont[k][r_ptw_word]    = wdata;
+                        //printf("VALEUR de data  : %x\n",r_cont[k][r_ptw_word]);
                         r_ptw_word               = r_ptw_word + 1;
                         r_pkt_length             = r_pkt_length + 4;
                     }
@@ -186,10 +181,10 @@ public:
                         // timer reset if last word
                         // r_timer                  = m_timeout;
 
-                        r_cont[container_index][r_ptw_word]    = wdata;
+                        r_cont[k][r_ptw_word]    = wdata;
                         r_ptw_word               = r_ptw_word + 1;
-                        if (odd) r_cont[container_index][word] = (r_cont[container_index][word] & 0x0000FFFF) | plen<<16;
-                        else     r_cont[container_index][word] = (r_cont[container_index][word] & 0xFFFF0000) | plen;
+                        if (odd) r_cont[k][word] = (r_cont[k][word] & 0x0000FFFF) | plen<<16;
+                        else     r_cont[k][word] = (r_cont[k][word] & 0xFFFF0000) | plen;
                         r_pkt_index              = r_pkt_index + 1;
                         r_pkt_length             = 0;
                     }
@@ -201,25 +196,25 @@ public:
         //////////////////////////////////////////////////////////////////////////
         else if ( cmd_w == RX_CHANNEL_WCMD_CLOSE ) // close the current container
             {
-                r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
+                r_cont[k][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
                 r_ptw_word               = 32;
                 r_ptw_cont               = (r_ptw_cont + 1) % 2;
                 r_sts                    = r_sts + 1;
                 r_pkt_index              = 0;
-                r_timer                  = m_timeout;
             }
         //////////////////////////////////////////////////////////////////////////
-        else // kind of IDLE state due to command NOP
+        else 
             {
                 // close current container if time-out
-                if ( r_timer <= 0 ) 
+                if ( r_timer <= 0 and r_sts < 3) 
                     {
-                        r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
+                        printf("timeout");
+                        r_cont[k][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
                         r_ptw_word               = 32;
                         r_ptw_cont               = (r_ptw_cont + 1) % 2;
                         r_sts                    = r_sts + 1;
                         r_pkt_index              = 0;
-                        r_timer                  = m_timeout;
+                        r_timer = m_timeout;
                     }
             }
 
@@ -252,7 +247,7 @@ public:
                 r_ptr_word = 0;
                 r_ptr_cont = (r_ptr_cont + 1) % 2;
                 r_sts      = r_sts - 1;
-                memset(r_cont[container_index], 0, sizeof(r_cont[container_index]));
+                r_timer    = m_timeout;
             }
         
     } // end update()
@@ -308,7 +303,7 @@ public:
     /////////////////////////////////////////////////////////////
     int32_t get_r_timer()
     {
-        return r_timer.read();
+        return r_timer;
     }
 
     //////////////////////////////////////////////////////////////
@@ -320,17 +315,9 @@ public:
         : m_name(name),
           m_timeout(timeout)
     {
-        // DISPATCH_FSM needs 1024 cycles to fill a container.
-        // The FSM needs/takes 379 cycles to write the biggest packet.
-        // Then to be usefull, the timeout must be bigger than 379.
-        // Minimal value might be 1024 to be sure that every container can be filled up
-        // with a continuous stream.
-        assert((m_timeout < 379)
-               and "ERROR in NIX_RX_CHANNEL : STS overflow");
-
         r_cont    = new uint32_t*[2];
-        r_cont[0] = new uint32_t[NIC_CONTAINER_SIZE];
-        r_cont[1] = new uint32_t[NIC_CONTAINER_SIZE];
+        r_cont[0] = new uint32_t[1024];
+        r_cont[1] = new uint32_t[1024];
     } 
 
     //////////////////

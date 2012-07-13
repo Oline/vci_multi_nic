@@ -22,6 +22,7 @@
  *
  * Copyright (c) UPMC, Lip6, Asim
  *         alain.greiner@lip6.fr
+ *         Clement Devigne <clement.devigne@etu.upmc.fr>
  *
  * Maintainers: alain
  */
@@ -47,11 +48,13 @@ namespace caba {
 using namespace sc_core;
 
 
+
+
 template<typename vci_param>
 class VciMultiNic
 	: public caba::BaseModule
 {
-private:
+   private:
 
     // methods
     void transition();
@@ -132,7 +135,7 @@ private:
     FifoMultiBuffer                         r_rx_fifo_multi;
     GenericFifo<uint16_t>                   r_tx_fifo_stream;
     FifoMultiBuffer                         r_bp_fifo_multi;
-
+    
     // Packet in and out
     NicRxGmii                               r_gmii_rx;
     NicTxGmii                               r_gmii_tx;
