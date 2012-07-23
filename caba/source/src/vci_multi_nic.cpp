@@ -1449,7 +1449,8 @@ tmpl(void)::genMoore()
             p_vci.cmdack = false;
             p_vci.rspval = true;
             p_vci.rdata  = r_tx_channel[channel]->wok();
-            p_vci.rerror = vci_param::ERR_GENERAL_DATA_ERROR;
+          //p_vci.rerror = vci_param::ERR_GENERAL_DATA_ERROR;
+            p_vci.rerror = vci_param::ERR_NORMAL;
             p_vci.rsrcid = r_vci_srcid.read();
             p_vci.rtrdid = r_vci_trdid.read();
             p_vci.rpktid = r_vci_pktid.read();
