@@ -157,7 +157,8 @@ tmpl(void)::transition()
                 typename vci_param::addr_t	address = p_vci.address.read();
                 typename vci_param::cmd_t	cmd     = p_vci.cmd.read();
                 typename vci_param::plen_t  plen    = p_vci.plen.read();
-
+                printf("address vci = %x\n",(uint32_t)address);
+                //printf("plen vci = %x\n",(uint32_t)plen);
                 assert ( ((plen & 0x3) == 0) and
                 "ERROR in VCI_MULTI_NIC : PLEN field must be multiple of 4 bytes");
 
@@ -172,6 +173,7 @@ tmpl(void)::transition()
                 size_t channel = (size_t)((address & 0x0000E000) >> 13);
                 size_t cell    = (size_t)((address & 0x00000FFF) >> 2);
                 bool   burst   = (address & 0x00001000);
+                //printf("channel = %d\n",(uint32_t)channel);
 
                 r_vci_channel  = channel;
 
@@ -185,6 +187,7 @@ tmpl(void)::transition()
                 }
                 else if ( burst  and (cmd == vci_param::CMD_READ) ) // RX_BURST transfer
                 {
+                    //printf("RX_BURST transfer\n");
                     r_vci_nwords  = (size_t)(plen >> 2);
                     r_vci_fsm     = VCI_READ_RX_BURST;
                 }
@@ -212,6 +215,7 @@ tmpl(void)::transition()
                 else if ( not burst and (cmd == vci_param::CMD_WRITE) and
                           (cell == NIC_RX_RELEASE) )         // RX_RELEASE write access
                 {
+                    printf("RX_RELEASE !!!\n");
                     assert( p_vci.eop.read() and
                     "ERROR in VCI_MULTI_NIC : RX_RELEASE write access must be one flit");
                     r_vci_fsm = VCI_WRITE_RX_RELEASE;
@@ -307,11 +311,7 @@ tmpl(void)::transition()
 
             if ( p_vci.rspack.read() )
             {
-                typename vci_param::addr_t	address = p_vci.address.read();
-
-                assert( (((address & 0x00000FFF) >> 2) == r_vci_ptr.read()) and
-                "ERROR in VCI_MULTI_NIC : address must be contiguous in VCI_WRITE_TX_BURST");
-
+                rx_channel_rcmd  = RX_CHANNEL_RCMD_READ;
                 r_vci_nwords     = r_vci_nwords.read() - 1;
                 r_vci_ptr        = r_vci_ptr.read() + 1;
                 if ( r_vci_nwords.read() == 1 ) r_vci_fsm = VCI_IDLE;
@@ -347,8 +347,8 @@ tmpl(void)::transition()
             if ( p_vci.rspack.read() )
             {
                 size_t channel = r_vci_channel.read();
-                //printf("address MAC = %x\n",r_vci_wdata.read());
                 r_channel_mac_4[channel] = r_vci_wdata.read();
+                printf("address MAC 4 of channel %d = %x\n",channel,r_channel_mac_4[channel].get_new_value());
                 r_vci_fsm       = VCI_IDLE;
             }
             break;
@@ -361,6 +361,7 @@ tmpl(void)::transition()
             {
                 size_t channel = r_vci_channel.read();
                 r_channel_mac_2[channel] = r_vci_wdata.read();
+                printf("address MAC 2 of channel %d = %x\n",channel,r_channel_mac_2[channel].get_new_value());
                 r_vci_fsm       = VCI_IDLE;
             }
             break;
@@ -767,6 +768,7 @@ tmpl(void)::transition()
 
             if ( r_rx_fifo_stream.rok() )
             {
+                printf (" BLABLAZLALGLGBLDGBLSLFSDLKFMSKLDFMSDFLMSDLQDF\n");
                 data                = r_rx_fifo_stream.read();
                 type                = (data >> 8) & 0x3;
                 if ( type == STREAM_TYPE_SOS )
@@ -855,7 +857,7 @@ tmpl(void)::transition()
         case RX_DISPATCH_CHANNEL_SELECT:  // check MAC address
         {
             // we read the second data word, without modifying the fifo state
-            //printf("ENTERING RX_DISPATCH_CHANNEL_SELECT\n");
+           // printf("ENTERING RX_DISPATCH_CHANNEL_SELECT\n");
             unsigned int    data_ext;
             bool            found = false;
             
@@ -864,8 +866,8 @@ tmpl(void)::transition()
             
             for ( size_t k = 0 ; (k < m_channels) and not found ; k++ )
             {
-                //printf("MAC address 4 for channel[%d] = %x\n",k,r_channel_mac_4[k].read());
-                //printf("MAC address 4 for packet = %x\n",r_rx_dispatch_data.read());
+                //printf("MAC address 4 for channel[%d] = %x\n",k,r_rx_dispatch_data.read());
+                //printf("MAC address 2 for channel[%d] = %x\n",k,data_ext);
                 if ( (r_channel_mac_4[k].read() == r_rx_dispatch_data.read() ) and
                      (r_channel_mac_2[k].read() == data_ext) )
                 {
@@ -920,7 +922,7 @@ tmpl(void)::transition()
         case RX_DISPATCH_READ_WRITE:    // read a new word from fifo and
                                         // write previous word to channel
         {
-           // printf("ENTERING RX_DISPATCH_READ_WRITE\n");
+            //printf("ENTERING RX_DISPATCH_READ_WRITE\n");
             rx_channel_wcmd     = RX_CHANNEL_WCMD_WRITE;
             rx_channel_wdata    = r_rx_dispatch_data.read();
             if ( r_rx_dispatch_bp.read() )
@@ -935,6 +937,7 @@ tmpl(void)::transition()
                 else                                   rx_fifo_multi_rcmd = FIFO_MULTI_RCMD_READ;
                 r_rx_dispatch_data = r_rx_fifo_multi.data();
             }
+            //printf("nb words left = %d\n",r_rx_dispatch_words.read());
             r_rx_dispatch_words = r_rx_dispatch_words.read() - 1;
             if (r_rx_dispatch_words.read() == 1)
             {
@@ -1368,7 +1371,7 @@ tmpl(void)::transition()
                                 read, 
                                 tx_channel_wdata );
     }
-        printf("\n**** STATUS STAT REGISTERS *****\n");
+       /* printf("\n**** STATUS STAT REGISTERS *****\n");
         printf("valeur de r_rx_g2s_npkt_send : %d\n",r_rx_g2s_npkt_send.read());
         printf("valeur de r_rx_g2s_npkt_send_crc_success : %d\n",r_rx_g2s_npkt_send_crc_success.read());
         printf("valeur de r_rx_g2s_npkt_send_crc_fail : %d\n",r_rx_g2s_npkt_send_crc_fail.read());
@@ -1378,7 +1381,7 @@ tmpl(void)::transition()
         printf("valeur de r_rx_des_npkt_send_write_mfifo_success : %d\n",r_rx_des_npkt_send_write_mfifo_success.read());
         printf("valeur de r_rx_dispatch_npkt_send_skip_adrmac_fail : %d\n",r_rx_dispatch_npkt_send_skip_adrmac_fail.read());
         printf("valeur de r_rx_dispatch_npkt_send_wchannel_success : %d\n",r_rx_dispatch_npkt_send_wchannel_success.read());
-        printf("**** END of STATUS STAT REGISTERS *****\n");
+        printf("**** END of STATUS STAT REGISTERS *****\n");*/
 
 } // end transition
 
