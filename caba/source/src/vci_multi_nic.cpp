@@ -596,7 +596,7 @@ tmpl(void)::transition()
     {
         case RX_DES_READ_0 :
         {
-printf("RX_DES_READ_0\n");
+//printf("RX_DES_READ_0\n");
                 uint16_t data;
                 uint32_t type;
                 
@@ -614,7 +614,7 @@ printf("RX_DES_READ_0\n");
 
         case RX_DES_READ_1 :
         {
-printf("RX_DES_READ_1\n");
+//printf("RX_DES_READ_1\n");
             uint16_t data;
             uint32_t type;
 
@@ -640,7 +640,7 @@ printf("RX_DES_READ_1\n");
 
         case RX_DES_READ_2:  
 	    {
-printf("RX_DES_READ_2\n");
+//printf("RX_DES_READ_2\n");
 		    uint16_t data;
 		    uint32_t type;
 		
@@ -666,7 +666,7 @@ printf("RX_DES_READ_2\n");
 
         case RX_DES_READ_3:
 	    {
-printf("RX_DES_READ_3\n");
+//printf("RX_DES_READ_3\n");
 		    uint16_t data;
 		    uint32_t type;
 		
@@ -692,7 +692,7 @@ printf("RX_DES_READ_3\n");
 
         case RX_DES_READ_WRITE_0:
 	    {
-printf("RX_DES_READ_WRITE_0\n");
+//printf("RX_DES_READ_WRITE_0\n");
 		    uint16_t data;
 		    uint32_t type;
 		
@@ -752,7 +752,7 @@ printf("RX_DES_READ_WRITE_0\n");
 
        	case RX_DES_READ_WRITE_1:
     	{
-printf("RX_DES_READ_WRITE_1\n");
+//printf("RX_DES_READ_WRITE_1\n");
 	    	uint16_t data;
 		    uint32_t type;
 		
@@ -801,7 +801,7 @@ printf("RX_DES_READ_WRITE_1\n");
 
        	case RX_DES_READ_WRITE_2:
     	{
-printf("RX_DES_READ_WRITE_2\n");
+//printf("RX_DES_READ_WRITE_2\n");
 	    	uint16_t data;
 		    uint32_t type;
 		
@@ -850,7 +850,7 @@ printf("RX_DES_READ_WRITE_2\n");
        	
         case RX_DES_READ_WRITE_3:
     	{
-printf("RX_DES_READ_WRITE_3\n");
+//printf("RX_DES_READ_WRITE_3\n");
 	    	uint16_t data;
 		    uint32_t type;
 		
@@ -901,7 +901,7 @@ printf("RX_DES_READ_WRITE_3\n");
 
         case RX_DES_WRITE_LAST:     // write last word in rx_fifo_multi
 	    {
-printf("RX_DES_WRITE_LAST\n");
+//printf("RX_DES_WRITE_LAST\n");
 		    //uint32_t data;
             uint32_t mask = 0xFFFFFFFF; // mask used for wdata padding
 		
@@ -928,7 +928,7 @@ printf("RX_DES_WRITE_LAST\n");
 
 	    case RX_DES_WRITE_CLEAR :
 	    {
-printf("RX_DES_WRITE_CLEAR\n");
+//printf("RX_DES_WRITE_CLEAR\n");
 		    rx_fifo_multi_wcmd  = FIFO_MULTI_WCMD_CLEAR;
 
 		    r_rx_des_counter_bytes = 0;
@@ -1240,26 +1240,40 @@ printf("RX_DES_WRITE_CLEAR\n");
                     r_rx_dispatch_channel = k;
                 }
             }
-            if (found) r_rx_dispatch_fsm = RX_DISPATCH_GET_WOK;
-            else       r_rx_dispatch_fsm = RX_DISPATCH_PACKET_SKIP;
+            if (found) 
+                r_rx_dispatch_fsm = RX_DISPATCH_GET_WOK;
+            else
+            {
+                r_rx_dispatch_npkt_receive_skip_adrmac_fail = r_rx_dispatch_npkt_receive_skip_adrmac_fail.read() + 1;
+                r_rx_dispatch_fsm = RX_DISPATCH_PACKET_SKIP;
+            }
             break;
         }
         case RX_DISPATCH_PACKET_SKIP:	// clear an unexpected packet in source fifo
         {
-            printf("PACKET SKIP !!!!!!!!\n");
-            if ( r_rx_dispatch_bp.read() )  bp_fifo_multi_rcmd = FIFO_MULTI_RCMD_SKIP;
-            else                            rx_fifo_multi_rcmd = FIFO_MULTI_RCMD_SKIP;
+printf("PACKET SKIP !!!!!!!!\n");
+
+            if ( r_rx_dispatch_bp.read() )  
+                bp_fifo_multi_rcmd = FIFO_MULTI_RCMD_SKIP;
+            else
+                rx_fifo_multi_rcmd = FIFO_MULTI_RCMD_SKIP;
+
             r_rx_dispatch_fsm = RX_DISPATCH_IDLE;
-            r_rx_dispatch_npkt_receive_skip_adrmac_fail = r_rx_dispatch_npkt_receive_skip_adrmac_fail.read() + 1;
             break;
         }
         case RX_DISPATCH_GET_WOK: // test if there is an open container in selected channel
         {
-            //printf("ENTERING RX_DISPATCH_GET_WOK\n");
+//printf("ENTERING RX_DISPATCH_GET_WOK\n");
             uint32_t channel = r_rx_dispatch_channel.read();
             bool wok         = r_rx_channel[channel]->wok();
             
-            if ( wok )  r_rx_dispatch_fsm = RX_DISPATCH_GET_SPACE;
+            if ( wok )  
+                r_rx_dispatch_fsm = RX_DISPATCH_GET_SPACE;
+            else
+            {
+                r_rx_dispatch_npkt_receive_wchannel_fail = r_rx_dispatch_npkt_receive_wchannel_fail.read() + 1;
+                r_rx_dispatch_fsm = RX_DISPATCH_PACKET_SKIP;
+            }
             break;
         }
         case RX_DISPATCH_GET_SPACE: // test available space in selected channel
@@ -1960,9 +1974,9 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
           //r_rx_des_npkt_send_drop_mfifo_full("r_rx_des_npkt_send_drop_mfifo_full"), 
           r_rx_des_npkt_receive_err_in_des("r_rx_des_npkt_receive_drop_in_des"),
           r_rx_des_npkt_receive_write_mfifo_success("r_rx_des_npkt_receive_write_mfifo_success"),
-          r_rx_des_npkt_receive_err_mfifo_full("r_rx_des_npkt_receive_err_mfifo_full"),
           r_rx_des_npkt_receive_small("r_rx_des_npkt_receive_small"),
           r_rx_des_npkt_receive_overflow("r_rx_des_npkt_receive_overflow"),
+          r_rx_des_npkt_receive_err_mfifo_full("r_rx_des_npkt_receive_err_mfifo_full"),
 
           r_rx_dispatch_fsm("r_rx_dispatch_fsm"),
           r_rx_dispatch_channel("r_rx_dispatch_channel"),
