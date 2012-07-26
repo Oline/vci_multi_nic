@@ -94,13 +94,16 @@ class VciMultiNic
 
     // RX_DES registers
     sc_signal<int>                          r_rx_des_fsm;
-    sc_signal<uint32_t>                     r_rx_des_counter_word;                  // nb words in one packet
+    sc_signal<uint32_t>                     r_rx_des_counter_bytes;                 // nb bytes in one packet
+    sc_signal<uint32_t>                     r_rx_des_padding;                       // padding
     sc_signal<uint8_t>*                     r_rx_des_data;                          // array[4]
-    sc_signal<size_t>                       r_rx_des_byte_index;                    // byte index
-    sc_signal<bool>                         r_rx_des_dirty;                         // output fifo modified
-    sc_signal<uint32_t>                     r_rx_des_npkt_send_drop_mfifo_full;     // packet send drop cause of mfifo full (counter)
-    sc_signal<uint32_t>                     r_rx_des_npkt_send_drop_invplen;        // packet send drop cause of plen not valid (counter)
-    sc_signal<uint32_t>                     r_rx_des_npkt_send_write_mfifo_success; // packet write success in mfifo (counter)
+    //sc_signal<size_t>                       r_rx_des_byte_index;                    // byte index
+    //sc_signal<bool>                         r_rx_des_dirty;                         // output fifo modified
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_err_in_des;         // packet send drop cause of plen not valid or multi_fifo full(counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_write_mfifo_success; // packet write success in mfifo (counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_small;               // packet err cause of plen < 64 B (counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_overflow;            // packet err cause of plen > 1518 B (counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_err_mfifo_full;      // packet err cause of mfifo full (counter)
 
     // RX_DISPATCH registers
     sc_signal<int>                          r_rx_dispatch_fsm;
@@ -175,9 +178,16 @@ public:
         RX_G2S_FAIL,
     };
     enum rx_des_fsm_state_e {
-        RX_DES_READ_FIRST,
-        RX_DES_READ_WRITE,
-        RX_DES_WRITE_LAST,
+    	RX_DES_READ_0,
+	    RX_DES_READ_1,
+	    RX_DES_READ_2,
+	    RX_DES_READ_3,
+	    RX_DES_READ_WRITE_0,
+	    RX_DES_READ_WRITE_1,
+	    RX_DES_READ_WRITE_2,
+	    RX_DES_READ_WRITE_3,
+	    RX_DES_WRITE_LAST,
+	    RX_DES_WRITE_CLEAR,
     };
     enum rx_dispatch_fsm_state_e {
         RX_DISPATCH_IDLE,

@@ -95,7 +95,7 @@ tmpl(void)::transition()
         r_vci_ptw          = 0;
 
         r_rx_g2s_fsm       = RX_G2S_IDLE;
-        r_rx_des_fsm       = RX_DES_READ_FIRST;
+        r_rx_des_fsm       = RX_DES_READ_0;
         r_rx_dispatch_fsm  = RX_DISPATCH_IDLE;
         r_tx_dispatch_fsm  = TX_DISPATCH_IDLE;
         r_tx_s2g_fsm       = TX_S2G_IDLE;
@@ -105,12 +105,20 @@ tmpl(void)::transition()
         r_rx_g2s_npkt_send_crc_fail = 0;
         r_rx_g2s_npkt_send_err = 0;
 
-        r_rx_des_npkt_send_drop_mfifo_full = 0;
-        r_rx_des_npkt_send_drop_invplen = 0;
-        r_rx_des_npkt_send_write_mfifo_success = 0;
+        //r_rx_des_npkt_send_drop_mfifo_full = 0;
+        //r_rx_des_npkt_send_drop_invplen = 0;
+        r_rx_des_counter_bytes = 0;
+        r_rx_des_padding = 0;
+        r_rx_des_npkt_receive_err_in_des = 0;
+        r_rx_des_npkt_receive_write_mfifo_success = 0;
+        r_rx_des_npkt_receive_err_mfifo_full = 0;
+        r_rx_des_npkt_receive_small = 0;
+        r_rx_des_npkt_receive_overflow = 0;
 
         r_rx_dispatch_npkt_send_skip_adrmac_fail = 0;
         r_rx_dispatch_npkt_send_wchannel_success = 0;
+
+
         
        
 
@@ -577,6 +585,362 @@ tmpl(void)::transition()
     // - if there not space in the rx_fifo_multi
     ///////////////////////////////////////////////////////////i////////////////
 
+    bool              rx_fifo_stream_read    = true;
+    fifo_multi_wcmd_t rx_fifo_multi_wcmd     = FIFO_MULTI_WCMD_NOP;
+    uint32_t          rx_fifo_multi_wdata    = 0;
+    uint32_t          rx_fifo_multi_padding  = 0;  // only used for the last word
+    bool              rx_des_packet_overflow = false;
+ 
+    switch (r_rx_des_fsm.read())
+    {
+        case RX_DES_READ_0 :
+        {
+printf("RX_DES_READ_0\n");
+                uint16_t data;
+                uint32_t type;
+                
+                data = r_rx_fifo_stream.read();
+                type = (data >> 8) & 0x3;
+
+                r_rx_des_data[0] = (uint8_t)(data & 0xFF);
+
+                if ( r_rx_fifo_stream.rok() and (type == STREAM_TYPE_SOS) )
+                {
+                    r_rx_des_fsm = RX_DES_READ_1;
+                }
+                break;
+        }
+
+        case RX_DES_READ_1 :
+        {
+printf("RX_DES_READ_1\n");
+            uint16_t data;
+            uint32_t type;
+
+            data = r_rx_fifo_stream.read();
+            type = (data >> 8) & 0x3;
+
+            r_rx_des_data[1] = (uint8_t)(data & 0xFF);
+
+            if ( r_rx_fifo_stream.rok() )
+            {
+                if ( type == STREAM_TYPE_NEV )
+                {
+                    r_rx_des_fsm = RX_DES_READ_2;
+                }
+
+                else
+                {
+                    r_rx_des_fsm = RX_DES_READ_0;
+                }
+            }
+            break;
+        }
+
+        case RX_DES_READ_2:  
+	    {
+printf("RX_DES_READ_2\n");
+		    uint16_t data;
+		    uint32_t type;
+		
+		    data = r_rx_fifo_stream.read();
+		    type = (data >> 8) & 0x3;
+		
+		    r_rx_des_data[2] = (uint8_t)(data & 0xFF);
+		
+		    if ( r_rx_fifo_stream.rok() )
+		    {
+			    if (type == STREAM_TYPE_NEV)
+			    {
+				    r_rx_des_fsm			= RX_DES_READ_3;
+			    }
+			    
+                else
+			    {
+				    r_rx_des_fsm			= RX_DES_READ_0;
+			    }
+		    }
+		    break;
+	    }
+
+        case RX_DES_READ_3:
+	    {
+printf("RX_DES_READ_3\n");
+		    uint16_t data;
+		    uint32_t type;
+		
+		    data = r_rx_fifo_stream.read();
+		    type = (data >> 8) & 0x3;
+		
+		    r_rx_des_data[3]	= (uint8_t)(data & 0xFF);
+		
+		    if ( r_rx_fifo_stream.rok() )
+		    {
+			    if ( (type == STREAM_TYPE_NEV) and r_rx_fifo_multi.wok() )
+			    {
+				    r_rx_des_fsm = RX_DES_READ_WRITE_0;
+			    }			
+			
+                else
+			    {
+				    r_rx_des_fsm = RX_DES_READ_0;
+			    }
+		    }
+		    break;
+	    }
+
+        case RX_DES_READ_WRITE_0:
+	    {
+printf("RX_DES_READ_WRITE_0\n");
+		    uint16_t data;
+		    uint32_t type;
+		
+		    // write previous word into fifo_multi
+		    rx_fifo_multi_wcmd  = FIFO_MULTI_WCMD_WRITE;
+		    rx_fifo_multi_wdata = (uint32_t)(r_rx_des_data[0].read()      ) |
+			    				  (uint32_t)(r_rx_des_data[1].read() << 8 ) |
+				    			  (uint32_t)(r_rx_des_data[2].read() << 16) |
+					    		  (uint32_t)(r_rx_des_data[3].read() << 24) ;
+		
+		    // Read new word
+            data                = r_rx_fifo_stream.read();
+            type                = (data >> 8) & 0x3;
+
+		    r_rx_des_data[0]	= (uint8_t)(data & 0xFF);
+		    r_rx_des_padding	= 3;
+		
+		    r_rx_des_counter_bytes = r_rx_des_counter_bytes.read() + 1;
+
+		    if ( r_rx_des_counter_bytes.get_new_value() >= (1518-4-4) )
+		    {
+			    rx_des_packet_overflow = true;
+		    }
+
+		    if ( r_rx_fifo_stream.rok() )     // do nothing if we cannot read
+		    {
+			    if (type == STREAM_TYPE_NEV and !rx_des_packet_overflow)
+			    {
+				    r_rx_des_fsm = RX_DES_READ_WRITE_1;
+			    }
+
+			    else if ( (type == STREAM_TYPE_EOS) and r_rx_fifo_multi.wok() and !rx_des_packet_overflow )
+			    {
+				    r_rx_des_fsm = RX_DES_WRITE_LAST;
+
+                    if ( r_rx_des_counter_bytes.get_new_value() <= (64-4-4) )
+                    {
+                        r_rx_des_npkt_receive_small = r_rx_des_npkt_receive_small.read() + 1;
+                        r_rx_des_fsm = RX_DES_WRITE_CLEAR;
+                    }
+
+			    }
+			    
+                else
+			    {
+                    if(rx_des_packet_overflow)
+                        r_rx_des_npkt_receive_overflow = r_rx_des_npkt_receive_overflow.read() + 1;
+
+                    if(!r_rx_fifo_multi.wok())
+                        r_rx_des_npkt_receive_err_mfifo_full = r_rx_des_npkt_receive_err_mfifo_full.read() + 1;
+				    r_rx_des_fsm = RX_DES_WRITE_CLEAR;
+			    }
+		    }
+		    break;
+	    }
+
+
+       	case RX_DES_READ_WRITE_1:
+    	{
+printf("RX_DES_READ_WRITE_1\n");
+	    	uint16_t data;
+		    uint32_t type;
+		
+		    data = r_rx_fifo_stream.read();
+		    type = (data >> 8) & 0x3;
+		
+		    r_rx_des_data[1]	= (uint8_t)(data & 0xFF);
+		
+		    r_rx_des_padding	= 2;
+		
+		    r_rx_des_counter_bytes = r_rx_des_counter_bytes.read() + 1;		
+		    if ( r_rx_des_counter_bytes.get_new_value() >= (1518-4-4) )
+		    {
+			    rx_des_packet_overflow = true;
+		    }
+		
+		    if ( r_rx_fifo_stream.rok() )     // do nothing if we cannot read
+		    {
+			    if (type == STREAM_TYPE_NEV and !rx_des_packet_overflow)
+			    {
+				    r_rx_des_fsm = RX_DES_READ_WRITE_2;
+			    }
+
+			    else if ( (type == STREAM_TYPE_EOS) and r_rx_fifo_multi.wok() and !rx_des_packet_overflow )
+			    {
+				    r_rx_des_fsm = RX_DES_WRITE_LAST;
+
+                    if ( r_rx_des_counter_bytes.get_new_value() <= (64-4-4) )
+                    {
+                        r_rx_des_npkt_receive_small = r_rx_des_npkt_receive_small.read() + 1;
+                        r_rx_des_fsm = RX_DES_WRITE_CLEAR;
+                    }
+			    }
+
+			    else
+			    {
+                    if(rx_des_packet_overflow)
+                        r_rx_des_npkt_receive_overflow = r_rx_des_npkt_receive_overflow.read() + 1;
+                    if(!r_rx_fifo_multi.wok())
+                        r_rx_des_npkt_receive_err_mfifo_full = r_rx_des_npkt_receive_err_mfifo_full.read() + 1;
+				    r_rx_des_fsm = RX_DES_WRITE_CLEAR;
+			    }
+		    }
+		    break;
+	    }
+
+       	case RX_DES_READ_WRITE_2:
+    	{
+printf("RX_DES_READ_WRITE_2\n");
+	    	uint16_t data;
+		    uint32_t type;
+		
+		    data = r_rx_fifo_stream.read();
+		    type = (data >> 8) & 0x3;
+		
+		    r_rx_des_data[2]	= (uint8_t)(data & 0xFF);
+		
+		    r_rx_des_padding	= 1;
+		
+		    r_rx_des_counter_bytes = r_rx_des_counter_bytes.read() + 1;		
+		    if ( r_rx_des_counter_bytes.get_new_value() >= (1518-4-4) )
+		    {
+			    rx_des_packet_overflow = true;
+		    }
+		
+		    if ( r_rx_fifo_stream.rok() )     // do nothing if we cannot read
+		    {
+			    if (type == STREAM_TYPE_NEV and !rx_des_packet_overflow)
+			    {
+				    r_rx_des_fsm = RX_DES_READ_WRITE_3;
+			    }
+
+			    else if ( (type == STREAM_TYPE_EOS) and r_rx_fifo_multi.wok() and !rx_des_packet_overflow )
+			    {
+				    r_rx_des_fsm = RX_DES_WRITE_LAST;
+
+                    if ( r_rx_des_counter_bytes.get_new_value() <= (64-4-4) )
+                    {
+                        r_rx_des_npkt_receive_small = r_rx_des_npkt_receive_small.read() + 1;
+                        r_rx_des_fsm = RX_DES_WRITE_CLEAR;
+                    }
+			    }
+
+			    else
+			    {
+                    if(rx_des_packet_overflow)
+                        r_rx_des_npkt_receive_overflow = r_rx_des_npkt_receive_overflow.read() + 1;
+                    if(!r_rx_fifo_multi.wok())
+                        r_rx_des_npkt_receive_err_mfifo_full = r_rx_des_npkt_receive_err_mfifo_full.read() + 1;
+				    r_rx_des_fsm = RX_DES_WRITE_CLEAR;
+			    }
+		    }
+		    break;
+	    }
+       	
+        case RX_DES_READ_WRITE_3:
+    	{
+printf("RX_DES_READ_WRITE_3\n");
+	    	uint16_t data;
+		    uint32_t type;
+		
+		    data = r_rx_fifo_stream.read();
+		    type = (data >> 8) & 0x3;
+		
+		    r_rx_des_data[3]	= (uint8_t)(data & 0xFF);
+		
+		    r_rx_des_padding	= 0;
+		
+		    r_rx_des_counter_bytes = r_rx_des_counter_bytes.read() + 1;		
+		    
+            if ( r_rx_des_counter_bytes.get_new_value() >= (1518-4-4) )
+		    {
+			    rx_des_packet_overflow = true;
+		    }
+
+	        if ( r_rx_fifo_stream.rok() )     // do nothing if we cannot read
+		    {
+
+			    if ( (type == STREAM_TYPE_NEV) and r_rx_fifo_multi.wok() and !rx_des_packet_overflow )
+			    {
+				    r_rx_des_fsm = RX_DES_READ_WRITE_0;
+			    }
+
+			    else if ( (type == STREAM_TYPE_EOS) and r_rx_fifo_multi.wok() and !rx_des_packet_overflow )
+			    {
+				    r_rx_des_fsm = RX_DES_WRITE_LAST;
+
+                    if (r_rx_des_counter_bytes.get_new_value() <= (64-4-4) )
+                    {
+                        r_rx_des_npkt_receive_small = r_rx_des_npkt_receive_small.read() + 1;
+                        r_rx_des_fsm = RX_DES_WRITE_CLEAR;
+                    }
+
+			    }
+			    else
+			    {
+                    if(rx_des_packet_overflow)
+                        r_rx_des_npkt_receive_overflow = r_rx_des_npkt_receive_overflow.read() + 1;
+                    if(!r_rx_fifo_multi.wok())
+                        r_rx_des_npkt_receive_err_mfifo_full = r_rx_des_npkt_receive_err_mfifo_full.read() + 1;
+				    r_rx_des_fsm = RX_DES_WRITE_CLEAR;
+			    }
+		    }
+		    break;
+	    }
+
+        case RX_DES_WRITE_LAST:     // write last word in rx_fifo_multi
+	    {
+printf("RX_DES_WRITE_LAST\n");
+		    //uint32_t data;
+            uint32_t mask = 0xFFFFFFFF; // mask used for wdata padding
+		
+		    rx_fifo_multi_wdata 	= (uint32_t)(r_rx_des_data[0].read()      ) |
+			    			          (uint32_t)(r_rx_des_data[1].read() << 8 ) |
+				    			      (uint32_t)(r_rx_des_data[2].read() << 16) |
+					    		      (uint32_t)(r_rx_des_data[3].read() << 24) ;
+							  
+		    /*if      (rx_des_s_padding == 3) data &= 0xFF; // 3 MSbyte = 0
+		    else if (rx_des_s_padding == 2) data &= 0xFFFF;	// 2 MSbyte = 0
+		    else if (rx_des_s_padding == 1) data &= 0xFFFFFF; // MSbyte = 0*/
+		    
+            rx_fifo_multi_wdata = rx_fifo_multi_wdata & (mask>>(r_rx_des_padding.read()<<3)); // useless Bytes are set to 0
+;							  
+		    rx_fifo_multi_wcmd  = FIFO_MULTI_WCMD_LAST;
+		    rx_fifo_multi_padding = r_rx_des_padding.read();
+		    
+            r_rx_des_npkt_receive_write_mfifo_success = r_rx_des_npkt_receive_write_mfifo_success.read() + 1;
+            r_rx_des_counter_bytes = 0;
+		    rx_des_packet_overflow = false;
+	        r_rx_des_fsm = RX_DES_READ_0;	
+		    break;
+	    }
+
+	    case RX_DES_WRITE_CLEAR :
+	    {
+printf("RX_DES_WRITE_CLEAR\n");
+		    rx_fifo_multi_wcmd  = FIFO_MULTI_WCMD_CLEAR;
+
+		    r_rx_des_counter_bytes = 0;
+		    rx_des_packet_overflow = false;
+            
+            r_rx_des_npkt_receive_err_in_des = r_rx_des_npkt_receive_err_in_des.read() + 1;
+		
+		    r_rx_des_fsm        = RX_DES_READ_0;
+	    }
+    } // end swich rx_des_fsm           
+
+
+    /*
     // default values for fifo commands
     bool              rx_fifo_stream_read   = true;
     fifo_multi_wcmd_t rx_fifo_multi_wcmd    = FIFO_MULTI_WCMD_NOP;
@@ -783,7 +1147,7 @@ tmpl(void)::transition()
             break;
         }
     } // end swich rx_des_fsm
-
+    */
 
     ///////////////////////////////////////////////////////////////////
     // The RX_DISPATCH FSM performs the actual transfer of
@@ -1494,9 +1858,16 @@ tmpl(void)::print_trace()
     };
     const char* rx_des_state_str[] = 
     {
-        "RX_DES_READ_FIRST",
-        "RX_DES_READ_WRITE",
+        "RX_DES_READ_0",
+        "RX_DES_READ_1",
+        "RX_DES_READ_2",
+        "RX_DES_READ_3",
+        "RX_DES_READ_WRITE_0",
+        "RX_DES_READ_WRITE_1",
+        "RX_DES_READ_WRITE_2",
+        "RX_DES_READ_WRITE_3",
         "RX_DES_WRITE_LAST",
+        "RX_DES_WRITE_CLEAR",
     };
     const char* rx_dispatch_state_str[] =
     {
@@ -1576,13 +1947,17 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
           r_rx_g2s_npkt_send_err("r_rx_g2s_npkt_send_err"),
 
           r_rx_des_fsm("r_rx_des_fsm"),
-          r_rx_des_counter_word("r_rx_des_counter_word"),
+          r_rx_des_counter_bytes("r_rx_des_counter_bytes"),
+          r_rx_des_padding("r_rx_des_padding"),
           r_rx_des_data(soclib::common::alloc_elems<sc_signal<uint8_t> >("r_rx_des_data", 4)),
-          r_rx_des_byte_index("r_rx_des_byte_index"),
-          r_rx_des_dirty("r_rx_des_dirty"),
-          r_rx_des_npkt_send_drop_mfifo_full("r_rx_des_npkt_send_drop_mfifo_full"), 
-          r_rx_des_npkt_send_drop_invplen("r_rx_des_npkt_send_drop_invplen"),
-          r_rx_des_npkt_send_write_mfifo_success("r_rx_des_npkt_send_write_mfifo_success"),
+          //r_rx_des_byte_index("r_rx_des_byte_index"),
+          //r_rx_des_dirty("r_rx_des_dirty"),
+          //r_rx_des_npkt_send_drop_mfifo_full("r_rx_des_npkt_send_drop_mfifo_full"), 
+          r_rx_des_npkt_receive_err_in_des("r_rx_des_npkt_receive_drop_in_des"),
+          r_rx_des_npkt_receive_write_mfifo_success("r_rx_des_npkt_receive_write_mfifo_success"),
+          r_rx_des_npkt_receive_err_mfifo_full("r_rx_des_npkt_receive_err_mfifo_full"),
+          r_rx_des_npkt_receive_small("r_rx_des_npkt_receive_small"),
+          r_rx_des_npkt_receive_overflow("r_rx_des_npkt_receive_overflow"),
 
           r_rx_dispatch_fsm("r_rx_dispatch_fsm"),
           r_rx_dispatch_channel("r_rx_dispatch_channel"),
