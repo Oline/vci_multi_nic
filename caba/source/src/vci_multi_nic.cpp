@@ -100,10 +100,10 @@ tmpl(void)::transition()
         r_tx_dispatch_fsm  = TX_DISPATCH_IDLE;
         r_tx_s2g_fsm       = TX_S2G_IDLE;
         
-        r_rx_g2s_npkt_send = 0;
-        r_rx_g2s_npkt_send_crc_success = 0;
-        r_rx_g2s_npkt_send_crc_fail = 0;
-        r_rx_g2s_npkt_send_err = 0;
+        r_rx_g2s_npkt_receive = 0;
+        r_rx_g2s_npkt_receive_crc_success = 0;
+        r_rx_g2s_npkt_receive_crc_fail = 0;
+        r_rx_g2s_npkt_receive_err = 0;
 
         //r_rx_des_npkt_send_drop_mfifo_full = 0;
         //r_rx_des_npkt_send_drop_invplen = 0;
@@ -115,8 +115,9 @@ tmpl(void)::transition()
         r_rx_des_npkt_receive_small = 0;
         r_rx_des_npkt_receive_overflow = 0;
 
-        r_rx_dispatch_npkt_send_skip_adrmac_fail = 0;
-        r_rx_dispatch_npkt_send_wchannel_success = 0;
+        r_rx_dispatch_npkt_receive_skip_adrmac_fail = 0;
+        r_rx_dispatch_npkt_receive_wchannel_success = 0;
+        r_rx_dispatch_npkt_receive_wchannel_fail    = 0;
 
 
         
@@ -450,7 +451,7 @@ tmpl(void)::transition()
             }
             else
             {
-                r_rx_g2s_npkt_send_err = r_rx_g2s_npkt_send_err.read() + 1;
+                r_rx_g2s_npkt_receive_err = r_rx_g2s_npkt_receive_err.read() + 1;
                 r_rx_g2s_fsm      = RX_G2S_FAIL; // modifié => go to FAIL STATE !
             }
             break;
@@ -488,11 +489,11 @@ tmpl(void)::transition()
             else if ( gmii_rx_dv and gmii_rx_er ) // error
             {
                 r_rx_g2s_fsm = RX_G2S_FAIL;
-                r_rx_g2s_npkt_send_err = r_rx_g2s_npkt_send_err.read() + 1;
+                r_rx_g2s_npkt_receive_err = r_rx_g2s_npkt_receive_err.read() + 1;
             }
             else if ( not gmii_rx_dv and gmii_rx_er ) // error extend
             {
-                r_rx_g2s_npkt_send_err = r_rx_g2s_npkt_send_err.read() + 1;
+                r_rx_g2s_npkt_receive_err = r_rx_g2s_npkt_receive_err.read() + 1;
                 r_rx_g2s_fsm = RX_G2S_FAIL;
             }
             break;
@@ -508,21 +509,21 @@ tmpl(void)::transition()
                 //printf("\nCHECK = %x\n",check);
                 //printf("CHECKSUM_READ = %x\n",r_rx_g2s_checksum.read());
                 //
-                r_rx_g2s_npkt_send = r_rx_g2s_npkt_send.read() + 1;
+                r_rx_g2s_npkt_receive = r_rx_g2s_npkt_receive.read() + 1;
 
             if ( r_rx_g2s_checksum.read() == check )
             {
                 //printf("CHECKSUM OK !\n");
                 rx_fifo_stream_write = true;
                 rx_fifo_stream_wdata = r_rx_g2s_dt5.read() | (STREAM_TYPE_EOS << 8);
-                r_rx_g2s_npkt_send_crc_success = r_rx_g2s_npkt_send_crc_success.read() + 1;
+                r_rx_g2s_npkt_receive_crc_success = r_rx_g2s_npkt_receive_crc_success.read() + 1;
             }
             else
             {
                 //printf("CHECKSUM KO !\n");
                 rx_fifo_stream_write = true;
                 rx_fifo_stream_wdata = r_rx_g2s_dt5.read() | (STREAM_TYPE_ERR << 8);
-                r_rx_g2s_npkt_send_crc_fail = r_rx_g2s_npkt_send_crc_fail.read() + 1;
+                r_rx_g2s_npkt_receive_crc_fail = r_rx_g2s_npkt_receive_crc_fail.read() + 1;
             }
 
             if ( gmii_rx_dv and not gmii_rx_er ) // start of packet / no error
@@ -1249,7 +1250,7 @@ printf("RX_DES_WRITE_CLEAR\n");
             if ( r_rx_dispatch_bp.read() )  bp_fifo_multi_rcmd = FIFO_MULTI_RCMD_SKIP;
             else                            rx_fifo_multi_rcmd = FIFO_MULTI_RCMD_SKIP;
             r_rx_dispatch_fsm = RX_DISPATCH_IDLE;
-            r_rx_dispatch_npkt_send_skip_adrmac_fail = r_rx_dispatch_npkt_send_skip_adrmac_fail.read() + 1;
+            r_rx_dispatch_npkt_receive_skip_adrmac_fail = r_rx_dispatch_npkt_receive_skip_adrmac_fail.read() + 1;
             break;
         }
         case RX_DISPATCH_GET_WOK: // test if there is an open container in selected channel
@@ -1319,7 +1320,7 @@ printf("RX_DES_WRITE_CLEAR\n");
             else                        rx_channel_padding = 4 - (plen & 0x3);
             rx_channel_wcmd     = RX_CHANNEL_WCMD_LAST;
             rx_channel_wdata    = r_rx_dispatch_data.read();
-            r_rx_dispatch_npkt_send_wchannel_success = r_rx_dispatch_npkt_send_wchannel_success.read() + 1;
+            r_rx_dispatch_npkt_receive_wchannel_success = r_rx_dispatch_npkt_receive_wchannel_success.read() + 1;
             r_rx_dispatch_fsm   = RX_DISPATCH_IDLE;
             break;
         }
@@ -1736,15 +1737,19 @@ printf("RX_DES_WRITE_CLEAR\n");
                                 tx_channel_wdata );
     }
        /* printf("\n**** STATUS STAT REGISTERS *****\n");
-        printf("valeur de r_rx_g2s_npkt_send : %d\n",r_rx_g2s_npkt_send.read());
-        printf("valeur de r_rx_g2s_npkt_send_crc_success : %d\n",r_rx_g2s_npkt_send_crc_success.read());
-        printf("valeur de r_rx_g2s_npkt_send_crc_fail : %d\n",r_rx_g2s_npkt_send_crc_fail.read());
-        printf("valeur de r_rx_g2s_npkt_send_err : %d\n",r_rx_g2s_npkt_send_err.read());
-        printf("valeur de r_rx_des_npkt_send_drop_mfifo_full : %d\n",r_rx_des_npkt_send_drop_mfifo_full.read());
-        printf("valeur de r_rx_des_npkt_send_drop_invplen : %d\n",r_rx_des_npkt_send_drop_invplen.read());
-        printf("valeur de r_rx_des_npkt_send_write_mfifo_success : %d\n",r_rx_des_npkt_send_write_mfifo_success.read());
-        printf("valeur de r_rx_dispatch_npkt_send_skip_adrmac_fail : %d\n",r_rx_dispatch_npkt_send_skip_adrmac_fail.read());
-        printf("valeur de r_rx_dispatch_npkt_send_wchannel_success : %d\n",r_rx_dispatch_npkt_send_wchannel_success.read());
+        printf("valeur de r_rx_g2s_npkt_receive : %d\n",r_rx_g2s_npkt_receive.read());
+        printf("valeur de r_rx_g2s_npkt_receive_crc_success : %d\n",r_rx_g2s_npkt_receive_crc_success.read());
+        printf("valeur de r_rx_g2s_npkt_receive_crc_fail : %d\n",r_rx_g2s_npkt_receive_crc_fail.read());
+        printf("valeur de r_rx_g2s_npkt_receive_err : %d\n",r_rx_g2s_npkt_receive_err.read());
+        printf("valeur de r_rx_des_npkt_receive_err_in_des : %d\n",r_rx_des_npkt_receive_err_in_des.read());
+        printf("valeur de r_rx_des_npkt_receive_err_mfifo_full : %d\n",r_rx_des_npkt_receive_drop_mfifo_full.read());
+        printf("valeur de r_rx_des_npkt_receive_overflow : %d\n",r_rx_des_npkt_receive_overflow.read());
+        printf("valeur de r_rx_des_npkt_receive_small : %d\n",r_rx_des_npkt_receive_small.read());
+        printf("valeur de r_rx_des_npkt_receive_write_mfifo_success : %d\n",r_rx_des_npkt_receive_write_mfifo_success.read());
+        printf("valeur de r_rx_des_npkt_receive_err_mfifo_full : %d\n",r_rx_des_npkt_receive_err_mfifo_full.read());
+        printf("valeur de r_rx_dispatch_npkt_receive_skip_adrmac_fail : %d\n",r_rx_dispatch_npkt_receive_skip_adrmac_fail.read());
+        printf("valeur de r_rx_dispatch_npkt_receive_wchannel_success : %d\n",r_rx_dispatch_npkt_receive_wchannel_success.read());
+        printf("valeur de r_rx_dispatch_npkt_receive_wchannel_fail : %d\n",r_rx_dispatch_npkt_receive_wchannel_fail.read());
         printf("**** END of STATUS STAT REGISTERS *****\n");*/
 
 } // end transition
@@ -1941,10 +1946,10 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
           r_rx_g2s_dt4("r_rx_g2s_dt4"),
           r_rx_g2s_dt5("r_rx_g2s_dt5"),
           r_rx_g2s_delay("r_rx_g2s_delay"),
-          r_rx_g2s_npkt_send("r_rx_g2s_npkt_send"),
-          r_rx_g2s_npkt_send_crc_success("r_rx_g2s_npkt_send_crc_success"),
-          r_rx_g2s_npkt_send_crc_fail("r_rx_g2s_npkt_send_crc_fail"),
-          r_rx_g2s_npkt_send_err("r_rx_g2s_npkt_send_err"),
+          r_rx_g2s_npkt_receive("r_rx_g2s_npkt_receive"),
+          r_rx_g2s_npkt_receive_crc_success("r_rx_g2s_npkt_receive_crc_success"),
+          r_rx_g2s_npkt_receive_crc_fail("r_rx_g2s_npkt_receive_crc_fail"),
+          r_rx_g2s_npkt_receive_err("r_rx_g2s_npkt_receive_err"),
 
           r_rx_des_fsm("r_rx_des_fsm"),
           r_rx_des_counter_bytes("r_rx_des_counter_bytes"),
@@ -1965,8 +1970,9 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
           r_rx_dispatch_plen("r_rx_dispatch_plen"),
           r_rx_dispatch_data("r_rx_dispatch_data"),
           r_rx_dispatch_words("r_rx_dispatch_words"),
-          r_rx_dispatch_npkt_send_skip_adrmac_fail("r_rx_dispatch_npkt_send_skip_adrmac_fail"),
-          r_rx_dispatch_npkt_send_wchannel_success("r_rx_dispatch_npkt_send_wchannel_success"),
+          r_rx_dispatch_npkt_receive_skip_adrmac_fail("r_rx_dispatch_npkt_receive_skip_adrmac_fail"),
+          r_rx_dispatch_npkt_receive_wchannel_success("r_rx_dispatch_npkt_receive_wchannel_success"),
+          r_rx_dispatch_npkt_receive_wchannel_fail("r_rx_dispatch_npkt_receive_wchannel_fail"),
 
           r_tx_dispatch_fsm("r_tx_dispatch_fsm"),
           r_tx_dispatch_channel("r_tx_dispatch_channel"),
