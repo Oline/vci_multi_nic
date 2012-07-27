@@ -121,6 +121,7 @@ tmpl(void)::transition()
 
 
         
+        r_tx_dispatch_first_bytes_pckt = 1;
        
 
         r_rx_fifo_stream.init();
@@ -179,20 +180,27 @@ tmpl(void)::transition()
                 r_vci_pktid	   = p_vci.pktid.read();
                 r_vci_wdata    = p_vci.wdata.read();
 
-                size_t channel = (size_t)((address & 0x0000E000) >> 13);
+                /*size_t channel = (size_t)((address & 0x0000E000) >> 13);
                 size_t cell    = (size_t)((address & 0x00000FFF) >> 2);
-                bool   burst   = (address & 0x00001000);
+                bool   burst   = (address & 0x00001000);*/
+
+                size_t channel = (size_t)((address & 0x0001C000) >> 14);
+                size_t cell    = (size_t)((address & 0x00000FFF) >> 2);
+                bool   burst   = (address & 0x00002000);
+                
                 //printf("channel = %d\n",(uint32_t)channel);
 
                 r_vci_channel  = channel;
 
                 assert( (channel < m_channels) and
-                "VCI_MULTI_NIC error : The channel index (ADDR[15:13] is too large");
+                "VCI_MULTI_NIC error : The channel index (ADDR[16:14] is too large");
 
 	            if ( burst and (cmd == vci_param::CMD_WRITE) )      // TX_BURST transfer
                 {
-                    if ( p_vci.eop.read() ) r_vci_fsm = VCI_WRITE_TX_BURST;
-                    else                           r_vci_fsm = VCI_WRITE_TX_BURST;
+                    if ( p_vci.eop.read() ) 
+                        r_vci_fsm = VCI_WRITE_TX_LAST;
+                    else                           
+                        r_vci_fsm = VCI_WRITE_TX_BURST;
                 }
                 else if ( burst  and (cmd == vci_param::CMD_READ) ) // RX_BURST transfer
                 {
@@ -267,13 +275,20 @@ tmpl(void)::transition()
 
                 // data[i]
                 typename vci_param::addr_t	address = p_vci.address.read();
-
+printf("address in write tx burst : %x\n",(uint32_t)address);
                 assert( (((address & 0x00000FFF) >> 2) == r_vci_ptw.read()) and
                 "ERROR in VCI_MULTI_NIC : address must be contiguous in VCI_WRITE_TX_BURST");
 
                 r_vci_wdata      = p_vci.wdata.read();
+printf("r_vci_data read success\n");
                 r_vci_ptw        = r_vci_ptw.read() + 1;
-                if ( p_vci.eop.read() ) r_vci_fsm = VCI_WRITE_TX_LAST;
+printf("r_vci_ptw ++ success\n");
+                if ( p_vci.eop.read() )
+                {
+printf("entre dans le if p_vci.eop\n");
+                    r_vci_fsm = VCI_WRITE_TX_LAST;
+printf("sort du le if p_vci.eop\n");
+                }
             }
             break;
         }
@@ -286,6 +301,7 @@ tmpl(void)::transition()
                 tx_channel_wcmd  = TX_CHANNEL_WCMD_WRITE;
                 tx_channel_wdata = r_vci_wdata.read();
                 r_vci_fsm = VCI_IDLE;
+printf("write LAST, wdata = %x\n",tx_channel_wdata);
             }
             break;
         }
@@ -304,6 +320,7 @@ tmpl(void)::transition()
         {
             if ( p_vci.rspack.read() )
             {
+printf("TX_CLOSE in VCI_FSM\n");
                 tx_channel_wcmd  = TX_CHANNEL_WCMD_CLOSE;
                 r_vci_ptw        = 0;
                 r_vci_fsm        = VCI_IDLE;
@@ -1251,7 +1268,7 @@ tmpl(void)::transition()
         }
         case RX_DISPATCH_PACKET_SKIP:	// clear an unexpected packet in source fifo
         {
-printf("PACKET SKIP !!!!!!!!\n");
+//printf("PACKET SKIP !!!!!!!!\n");
 
             if ( r_rx_dispatch_bp.read() )  
                 bp_fifo_multi_rcmd = FIFO_MULTI_RCMD_SKIP;
@@ -1358,6 +1375,8 @@ printf("PACKET SKIP !!!!!!!!\n");
     uint32_t             tx_fifo_stream_wdata  = 0;
     uint32_t             bp_fifo_multi_padding = 0;
     uint32_t             bp_fifo_multi_wdata   = 0;
+    
+
 
     switch( r_tx_dispatch_fsm.read() )
     {
@@ -1369,6 +1388,7 @@ printf("PACKET SKIP !!!!!!!!\n");
                 size_t k = (x + 1 + r_tx_dispatch_channel.read()) % m_channels;
                 if ( r_tx_channel[k]->rok() ) 
                 {
+//printf("TX_DISPATCH_IDLE : 1 channel not empty\n");
                     r_tx_dispatch_channel = k;
                     r_tx_dispatch_fsm     = TX_DISPATCH_GET_NPKT;
                     break;
@@ -1381,16 +1401,20 @@ printf("PACKET SKIP !!!!!!!!\n");
         {   
             uint32_t    channel   = r_tx_dispatch_channel.read();
             r_tx_dispatch_packets = r_tx_channel[channel]->npkt();
+//printf("TX_DISPATCH_GET_NPKT : %d\n",r_tx_dispatch_packets.get_new_value());
+            r_tx_dispatch_fsm = TX_DISPATCH_GET_PLEN;
             break;
         }
         case TX_DISPATCH_GET_PLEN: // get packet length from tx_channel
         {   
             uint32_t channel      = r_tx_dispatch_channel.read();
             uint32_t plen         = r_tx_channel[channel]->plen();
+            r_tx_dispatch_first_bytes_pckt = 1;
             r_tx_dispatch_bytes   = plen & 0x3;
             if ( (plen & 0x3) == 0 ) r_tx_dispatch_words = plen >> 2;
             else                     r_tx_dispatch_words = (plen >> 2) + 1;
             r_tx_dispatch_fsm  = TX_DISPATCH_READ_FIRST;
+//printf("TX_DISPATCH_GET_PLEN : %d %d %d\n",plen,r_tx_dispatch_bytes.get_new_value(),r_tx_dispatch_words.get_new_value() );
             break;
         }
         case TX_DISPATCH_READ_FIRST: // read first word from tx_channel
@@ -1409,6 +1433,8 @@ printf("PACKET SKIP !!!!!!!!\n");
             unsigned int    data_ext = r_tx_channel[channel]->data() & 0x0000FFFF;  
             bool            found    = false;
 
+//printf("TX_DISPATCH_FIFO_SELECT : @MAC 4 = %x | @MAC 2 = %x \n",r_tx_dispatch_data.read(),data_ext );
+
             for ( size_t k = 0 ; (k < m_channels) and not found ; k++ )
             {
                 if ( (r_channel_mac_4[k].read() == r_tx_dispatch_data.read() ) and
@@ -1421,6 +1447,7 @@ printf("PACKET SKIP !!!!!!!!\n");
         case TX_DISPATCH_READ_WRITE_BP: // write previous data in bp_fifo
                                         // and read a new data from selected channel
         {
+//printf("TX_DISPATCH_READ_WRITE_BP\n");
             uint32_t  channel = r_tx_dispatch_channel.read();
 
             uint32_t  words   = r_tx_dispatch_words.read();  
@@ -1445,6 +1472,7 @@ printf("PACKET SKIP !!!!!!!!\n");
         }
         case TX_DISPATCH_WRITE_LAST_BP:  // write last word in bp_fifo
         {
+//printf("TX_DISPATCH_WRITE_LAST_BP\n");
             uint32_t  packets = r_tx_dispatch_packets.read();
             uint32_t  bytes   = r_tx_dispatch_bytes.read();
 
@@ -1470,13 +1498,31 @@ printf("PACKET SKIP !!!!!!!!\n");
             uint32_t words   = r_tx_dispatch_words.read();
             uint32_t bytes   = r_tx_dispatch_bytes.read();
             uint32_t packets = r_tx_dispatch_packets.read();
+
+
             if ( r_tx_fifo_stream.wok() )
             {
+                /*printf("channel = %x\n",channel);
+                printf("words = %x\n",words);
+                printf("bytes = %x\n",bytes);
+                printf("packets = %x\n",packets);
+                printf("max_words = %x\n",max_words);*/
                 tx_fifo_stream_write = true;
-                tx_fifo_stream_wdata = r_tx_dispatch_data.read() & 0x000000FF;
+//                tx_fifo_stream_wdata = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_SOS<<8);
+                if ( (r_tx_dispatch_first_bytes_pckt.read() == 1))
+                {
+                    printf("SOS\n");
+                    tx_fifo_stream_wdata = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_SOS<<8);
+                    r_tx_dispatch_first_bytes_pckt = 0;
+                }
+                else
+                {
+                    tx_fifo_stream_wdata = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_NEV<<8);
+                }
+//printf("TX_DISPATCH_WRITE_B0_TX : wdata = %x\n",tx_fifo_stream_wdata);
                 if ( (words == 0) and (bytes == 1) )   // last byte to write in tx_fifo
                 {
-                    tx_fifo_stream_wdata         = tx_fifo_stream_wdata | 0x00000100;
+                    tx_fifo_stream_wdata         = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_EOS <<8);
                     r_tx_dispatch_packets = packets - 1;
                     if ( packets == 1 ) r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
                     else                r_tx_dispatch_fsm = TX_DISPATCH_GET_PLEN;
@@ -1497,10 +1543,11 @@ printf("PACKET SKIP !!!!!!!!\n");
             if ( r_tx_fifo_stream.wok() )
             {
                 tx_fifo_stream_write = true;
-                tx_fifo_stream_wdata = (r_tx_dispatch_data.read() >> 8) & 0x000000FF;
+                tx_fifo_stream_wdata = ((r_tx_dispatch_data.read() >> 8) & 0x000000FF) | (STREAM_TYPE_NEV<<8);
+//printf("TX_DISPATCH_WRITE_B1_TX : wdata = %x\n", tx_fifo_stream_wdata);
                 if ( (words == 0) and (bytes == 2) )   // last byte to write in tx_fifo
                 {
-                    tx_fifo_stream_wdata = tx_fifo_stream_wdata | 0x00000100;
+                    tx_fifo_stream_wdata         = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_EOS <<8);
                     r_tx_dispatch_packets = packets - 1;
                     if ( packets == 1 ) r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
                     else                r_tx_dispatch_fsm = TX_DISPATCH_GET_PLEN;
@@ -1521,10 +1568,11 @@ printf("PACKET SKIP !!!!!!!!\n");
             if ( r_tx_fifo_stream.wok() )
             {
                 tx_fifo_stream_write = true;
-                tx_fifo_stream_wdata = (r_tx_dispatch_data.read() >> 16) & 0x000000FF;
+                tx_fifo_stream_wdata = ((r_tx_dispatch_data.read() >> 16) & 0x000000FF) | (STREAM_TYPE_NEV<<8);
+//printf("TX_DISPATCH_WRITE_B2_TX : wdata = %x\n",tx_fifo_stream_wdata);
                 if ( (words == 0) and (bytes == 3) )   // last byte to write in tx_fifo
                 {
-                    tx_fifo_stream_wdata = tx_fifo_stream_wdata | 0x00000100;
+                    tx_fifo_stream_wdata         = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_EOS <<8);
                     r_tx_dispatch_packets = packets - 1;
                     if ( packets == 1 ) r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
                     else                r_tx_dispatch_fsm = TX_DISPATCH_GET_PLEN;
@@ -1540,6 +1588,7 @@ printf("PACKET SKIP !!!!!!!!\n");
                                         // and read word from selected channel
                                         // if the current word is not the last
         {
+//printf("TX_DISPATCH_READ_WRITE_TX\n");
             uint32_t channel = r_tx_dispatch_channel.read();
             uint32_t words   = r_tx_dispatch_words.read();
             uint32_t packets = r_tx_dispatch_packets.read();
@@ -1547,10 +1596,10 @@ printf("PACKET SKIP !!!!!!!!\n");
             if ( r_tx_fifo_stream.wok() )
             {
                 tx_fifo_stream_write = true;
-                tx_fifo_stream_wdata = (r_tx_dispatch_data.read() >> 24) & 0x000000FF;
+                tx_fifo_stream_wdata = ((r_tx_dispatch_data.read() >> 24) & 0x000000FF) | (STREAM_TYPE_NEV<<8);
                 if ( words == 0 )       // last byte to write in tx_fifo
                 {
-                    tx_fifo_stream_wdata = tx_fifo_stream_wdata | 0x00000100;
+                    tx_fifo_stream_wdata         = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_EOS <<8);
                     r_tx_dispatch_packets = packets - 1;
                     if ( packets == 1 ) r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
                     else                r_tx_dispatch_fsm = TX_DISPATCH_GET_PLEN;
@@ -1574,6 +1623,7 @@ printf("PACKET SKIP !!!!!!!!\n");
         }
         case TX_DISPATCH_RELEASE_CONT: // release the container in tx_channel
         {
+printf("TX_DISPATCH_RELEASE_CONT\n");
             tx_channel_rcmd   = TX_CHANNEL_RCMD_RELEASE;
             r_tx_dispatch_fsm = TX_DISPATCH_IDLE;
             break;
@@ -1600,6 +1650,7 @@ printf("PACKET SKIP !!!!!!!!\n");
                 uint32_t data = r_tx_fifo_stream.read();
                 uint32_t type = (data >> 8) & 0x3;
 
+//printf("S2G IDLE : data is %x and type is %x\n",data,type);
                 assert ( (type == STREAM_TYPE_SOS) and
                 "ERROR in VCI_MULTI_NIC : illegal type received in TX_S2G_IDLE");
 
@@ -1608,22 +1659,27 @@ printf("PACKET SKIP !!!!!!!!\n");
                 r_tx_s2g_checksum   = data & 0xFF;
                 r_tx_s2g_data       = data & 0xFF;
             } 
-            r_gmii_tx.put(0, false, false);
+            r_gmii_tx.put(false, false,0);
             break;
         }
         //////////////////////
         case TX_S2G_WRITE_DATA:     // write one data byte into gmii_tx
                                     // and read next byte from fifo_stream
         {
+            r_gmii_tx.put(true,false,r_tx_s2g_data.read());
             if ( r_tx_fifo_stream.rok() )
             {
                 uint32_t data = r_tx_fifo_stream.read();
                 uint32_t type = (data >> 8) & 0x3;
-
+printf("S2G_WRITE_DATA : data is %x and type is %x\n",data,type);
                 assert ( (type != STREAM_TYPE_SOS) and (type != STREAM_TYPE_ERR) and
                 "ERROR in VCI_MULTI_NIC : illegal type received in TX_S2G_WRITE_DATA");
 
-                if ( type == STREAM_TYPE_EOS ) r_tx_s2g_fsm = TX_S2G_WRITE_CS; 
+                if ( type == STREAM_TYPE_EOS ) 
+                {
+//                    printf("EOS GO CS !!!!\n");
+                    r_tx_s2g_fsm = TX_S2G_WRITE_CS; 
+                }
 
                 tx_fifo_stream_read = true;
                 r_tx_s2g_data       = data & 0xFF;
@@ -1634,7 +1690,7 @@ printf("PACKET SKIP !!!!!!!!\n");
                 assert (false and  
                 "ERROR in VCI_MULTI_NIC : tx_fifo should not be empty");
             } 
-            r_gmii_tx.put( r_tx_s2g_data.read(), true, false);
+            //r_gmii_tx.put(true,false,r_tx_s2g_data.read());
             break;
         }
         ////////////////////
@@ -1661,8 +1717,9 @@ printf("PACKET SKIP !!!!!!!!\n");
                 gmii_data      = (r_tx_s2g_checksum.read() >> 24) & 0xFF;
                 r_tx_s2g_index = 0;
                 r_tx_s2g_fsm   = TX_S2G_IDLE;
+//                printf("CS GO S2G IDLE !\n");
             }    
-            r_gmii_tx.put( gmii_data, true, false);
+            r_gmii_tx.put(true,false, gmii_data);
             break;
         }
     } // end switch tx_s2g_fsm
@@ -1703,7 +1760,7 @@ printf("PACKET SKIP !!!!!!!!\n");
 
     /*printf("\n\n");
     printf("*********** STATUS FIFO STREAM ************\n");
-    r_rx_fifo_stream.print();
+    r_tx_fifo_stream.print();
     printf("*********** END STATUS FIFO STREAM ************\n");
     printf("\n\n");*/
 
@@ -1994,6 +2051,7 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
           r_tx_dispatch_packets("r_tx_dispatch_packets"),
           r_tx_dispatch_words("r_tx_dispatch_words"),
           r_tx_dispatch_bytes("r_tx_dispatch_bytes"),
+          r_tx_dispatch_first_bytes_pckt("r_tx_dispatch_first_bytes_pckt"),
 
           r_tx_s2g_fsm("r_tx_s2g_fsm"),
           r_tx_s2g_checksum("r_tx_s2g_checksum"),
@@ -2006,7 +2064,7 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
           r_bp_fifo_multi("r_bp_fifo_multi", 32, 32),   // 1024 slots of one word
 
           r_gmii_rx("r_gmii_rx", "in-mixte.txt", 1),  // one cycle between packets
-          r_gmii_tx("r_gmii_tx", "tx_file_pathname"),
+          r_gmii_tx("r_gmii_tx", "out_tx.txt"),
 
           m_segment(mt.getSegment(tgtid)),
           m_channels(channels),

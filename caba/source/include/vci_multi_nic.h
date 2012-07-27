@@ -123,6 +123,7 @@ class VciMultiNic
     sc_signal<uint32_t>                     r_tx_dispatch_packets;  // number of packets
     sc_signal<uint32_t>                     r_tx_dispatch_words;    // read words counter
     sc_signal<uint32_t>                     r_tx_dispatch_bytes;    // bytes in last word
+    sc_signal<bool>                         r_tx_dispatch_first_bytes_pckt;
 
     // TX_S2G registers
     sc_signal<int>                          r_tx_s2g_fsm;
