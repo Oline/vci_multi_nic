@@ -148,12 +148,16 @@ public:
             r_ptw_word = 0;
             r_ptw_cont = (r_ptw_cont + 1) % 2;
             r_sts      = r_sts + 1;
+printf("TX_CLOSE in tx_channel\n");
+printf("r_ptw_cont = %d\n",r_ptw_cont);
+printf("r_sts = %d\n",r_sts);
         }
 
         // RCMD register update (depends only on cmd_r)
         
         if ( cmd_r == TX_CHANNEL_RCMD_READ )       // read one packet word
         {
+printf("TX_channel READ\n");
             assert( (r_ptr_word < 1024) and
                     "ERROR in NIC_TX_CHANNEL : read pointer overflow" );
 
@@ -169,6 +173,7 @@ public:
         else if ( cmd_r == TX_CHANNEL_RCMD_LAST )  // read last word in a packet
                                                    // and updates packet index
         {
+printf("TX_channel READ LAST\n");
             assert( (r_ptw_word < 1024) and 
                     "ERROR in NIC_TX_CHANNEL : write pointer overflow" );
 
@@ -187,11 +192,13 @@ public:
         }
         else if ( cmd_r == TX_CHANNEL_RCMD_RELEASE ) // release the current container
         {
+printf("TX_channel RELEASE\n");
             r_pkt_index = 0;
             r_ptr_word  = 0;
             r_ptr_cont  = (r_ptr_cont + 1) % 2;
             r_sts       = r_sts - 1;
         }
+        //printf("r_cont[%d][%d] = %x\n",k,r_ptw_word,r_cont[k][r_ptw_word]);
     } // end update()
 
     /////////////////////////////////////////////////////////////

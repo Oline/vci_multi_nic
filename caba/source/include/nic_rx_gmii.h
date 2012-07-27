@@ -106,10 +106,10 @@ class NicRxGmii
                 m_file >> r_plen >> string;
                 if(m_file.eof())
                     {
-                        printf("FIN DU FICHIER\n");
+                        //printf("FIN DU FICHIER\n");
                         m_file.clear();
                         m_file.seekg(0, std::ios::beg);
-                        printf("REMISE A ZERO DU FICHIER\n");
+                        //printf("REMISE A ZERO DU FICHIER\n");
                         m_file >> r_plen >> string;
                     }
                 //std::cout << std::hex << string << std::endl;

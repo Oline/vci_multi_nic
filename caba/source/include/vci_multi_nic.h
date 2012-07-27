@@ -87,20 +87,23 @@ class VciMultiNic
     sc_signal<uint8_t>                      r_rx_g2s_dt4;                     // local data buffer
     sc_signal<uint8_t>                      r_rx_g2s_dt5;                     // local data buffer
     sc_signal<size_t>                       r_rx_g2s_delay;                   // delay cycle counter
-    sc_signal<uint32_t>                     r_rx_g2s_npkt_send;               // packet send counter
-    sc_signal<uint32_t>                     r_rx_g2s_npkt_send_crc_success;   // packet send checksum OK counter
-    sc_signal<uint32_t>                     r_rx_g2s_npkt_send_crc_fail;      // packet send checksum KO counter
-    sc_signal<uint32_t>                     r_rx_g2s_npkt_send_err;           // packet send ERR counter
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive;               // packet receive counter
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive_crc_success;   // packet receive checksum OK counter
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive_crc_fail;      // packet receive checksum KO counter
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive_err;           // packet receive ERR counter
 
     // RX_DES registers
     sc_signal<int>                          r_rx_des_fsm;
-    sc_signal<uint32_t>                     r_rx_des_counter_word;                  // nb words in one packet
+    sc_signal<uint32_t>                     r_rx_des_counter_bytes;                 // nb bytes in one packet
+    sc_signal<uint32_t>                     r_rx_des_padding;                       // padding
     sc_signal<uint8_t>*                     r_rx_des_data;                          // array[4]
-    sc_signal<size_t>                       r_rx_des_byte_index;                    // byte index
-    sc_signal<bool>                         r_rx_des_dirty;                         // output fifo modified
-    sc_signal<uint32_t>                     r_rx_des_npkt_send_drop_mfifo_full;     // packet send drop cause of mfifo full (counter)
-    sc_signal<uint32_t>                     r_rx_des_npkt_send_drop_invplen;        // packet send drop cause of plen not valid (counter)
-    sc_signal<uint32_t>                     r_rx_des_npkt_send_write_mfifo_success; // packet write success in mfifo (counter)
+    //sc_signal<size_t>                       r_rx_des_byte_index;                    // byte index
+    //sc_signal<bool>                         r_rx_des_dirty;                         // output fifo modified
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_err_in_des;         // packet receive drop cause of plen not valid or multi_fifo full(counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_write_mfifo_success; // packet receive write success in mfifo (counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_small;               // packet receive err cause of plen < 64 B (counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_overflow;            // packet receive err cause of plen > 1518 B (counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_err_mfifo_full;      // packet receive err cause of mfifo full (counter)
 
     // RX_DISPATCH registers
     sc_signal<int>                          r_rx_dispatch_fsm;
@@ -109,8 +112,9 @@ class VciMultiNic
     sc_signal<uint32_t>                     r_rx_dispatch_plen;                          // packet length (bytes)
     sc_signal<uint32_t>                     r_rx_dispatch_data;                          // word value    
     sc_signal<uint32_t>                     r_rx_dispatch_words;                         // write words counter
-    sc_signal<uint32_t>                     r_rx_dispatch_npkt_send_skip_adrmac_fail;    // packet send skip cause of adrmac false counter
-    sc_signal<uint32_t>                     r_rx_dispatch_npkt_send_wchannel_success;    // packet send write in channel success counter
+    sc_signal<uint32_t>                     r_rx_dispatch_npkt_receive_skip_adrmac_fail; // packet receive skip cause of adrmac false counter
+    sc_signal<uint32_t>                     r_rx_dispatch_npkt_receive_wchannel_success; // packet receive write in channel success counter
+    sc_signal<uint32_t>                     r_rx_dispatch_npkt_receive_wchannel_fail;    // packet receive write in channel fail cause of channel full counter
     
     // TX_DISPATCH registers
     sc_signal<int>                          r_tx_dispatch_fsm;
@@ -119,6 +123,7 @@ class VciMultiNic
     sc_signal<uint32_t>                     r_tx_dispatch_packets;  // number of packets
     sc_signal<uint32_t>                     r_tx_dispatch_words;    // read words counter
     sc_signal<uint32_t>                     r_tx_dispatch_bytes;    // bytes in last word
+    sc_signal<bool>                         r_tx_dispatch_first_bytes_pckt;
 
     // TX_S2G registers
     sc_signal<int>                          r_tx_s2g_fsm;
@@ -175,9 +180,16 @@ public:
         RX_G2S_FAIL,
     };
     enum rx_des_fsm_state_e {
-        RX_DES_READ_FIRST,
-        RX_DES_READ_WRITE,
-        RX_DES_WRITE_LAST,
+    	RX_DES_READ_0,
+	    RX_DES_READ_1,
+	    RX_DES_READ_2,
+	    RX_DES_READ_3,
+	    RX_DES_READ_WRITE_0,
+	    RX_DES_READ_WRITE_1,
+	    RX_DES_READ_WRITE_2,
+	    RX_DES_READ_WRITE_3,
+	    RX_DES_WRITE_LAST,
+	    RX_DES_WRITE_CLEAR,
     };
     enum rx_dispatch_fsm_state_e {
         RX_DISPATCH_IDLE,

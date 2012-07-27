@@ -161,6 +161,7 @@ public:
                         //printf("VALEUR de data  : %x\n",r_cont[container_index][r_ptw_word]);
                         r_ptw_word               = r_ptw_word + 1;
                         r_pkt_length             = r_pkt_length + 4;
+                        //printf("WRITING CHANNEL %d RX timer = %d\n",container_index,r_timer);
                     }
                 else
                     {
@@ -185,7 +186,8 @@ public:
 
                         // timer reset if last word
                         // r_timer                  = m_timeout;
-
+                        //printf("CONTAINER ecrit %d\n",container_index);
+                        //printf("WRITING LAST CHANNEL %d RX timer = %d and plen =%d\n",container_index,r_timer,plen);
                         r_cont[container_index][r_ptw_word]    = wdata;
                         r_ptw_word               = r_ptw_word + 1;
                         if (odd) r_cont[container_index][word] = (r_cont[container_index][word] & 0x0000FFFF) | plen<<16;
@@ -201,12 +203,13 @@ public:
         //////////////////////////////////////////////////////////////////////////
         else if ( cmd_w == RX_CHANNEL_WCMD_CLOSE ) // close the current container
             {
-                r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
-                r_ptw_word               = 32;
-                r_ptw_cont               = (r_ptw_cont + 1) % 2;
-                r_sts                    = r_sts + 1;
-                r_pkt_index              = 0;
-                r_timer                  = m_timeout;
+                //r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
+                r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
+                r_ptw_word                  = 32;
+                r_ptw_cont                  = (r_ptw_cont + 1) % 2;
+                r_sts                       = r_sts + 1;
+                r_pkt_index                 = 0;
+                r_timer                     = m_timeout;
             }
         //////////////////////////////////////////////////////////////////////////
         else // kind of IDLE state due to command NOP
@@ -214,12 +217,14 @@ public:
                 // close current container if time-out
                 if ( r_timer <= 0 ) 
                     {
-                        r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
-                        r_ptw_word               = 32;
-                        r_ptw_cont               = (r_ptw_cont + 1) % 2;
-                        r_sts                    = r_sts + 1;
-                        r_pkt_index              = 0;
-                        r_timer                  = m_timeout;
+                        printf("CLOSE BY TIMEOUT\n");
+                        //r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
+                        r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
+                        r_ptw_word                  = 32;
+                        r_ptw_cont                  = (r_ptw_cont + 1) % 2;
+                        r_sts                       = r_sts + 1;
+                        r_pkt_index                 = 0;
+                        r_timer                     = m_timeout;
                     }
             }
 
@@ -234,9 +239,10 @@ public:
         
         if ( cmd_r == RX_CHANNEL_RCMD_READ )       // read one container word
             {
+                //printf("READING CHANNEL RX timer = %d\n",r_timer);
                 assert( (r_ptr_word < 1024) and
                         "ERROR in NIC_RX_CHANNEL : read pointer overflow" );
-
+                //printf("le container lu est %d\n",container_index);
                 if ( r_sts > 0 )    // at least one filled container
                     {
                         r_ptr_word++;
@@ -249,10 +255,12 @@ public:
             }
         else if ( cmd_r == RX_CHANNEL_RCMD_RELEASE ) // release the current container
             {
+                //printf("RELEASING CHANNEL RX timer = %d\n",r_timer);
                 r_ptr_word = 0;
+                memset(r_cont[r_ptr_cont], 0, sizeof(r_cont[container_index]));
                 r_ptr_cont = (r_ptr_cont + 1) % 2;
+                //printf("le futur container en lecture sera %d\n",r_ptr_cont);
                 r_sts      = r_sts - 1;
-                memset(r_cont[container_index], 0, sizeof(r_cont[container_index]));
             }
         
     } // end update()

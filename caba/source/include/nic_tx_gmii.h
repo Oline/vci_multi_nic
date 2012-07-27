@@ -48,6 +48,12 @@
 #include <systemc>
 #include <assert.h>
 
+#include <string>
+#include <iostream>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
+
 namespace soclib { 
 namespace caba {
 
@@ -58,7 +64,7 @@ class NicTxGmii
 {
     // structure constants
     const std::string   m_name;
-//  const FILE          m_file;
+    std::ofstream       m_file;
 
     // registers
     uint32_t            r_counter;      // cycles counter (used for both gap and plen)
@@ -70,6 +76,22 @@ class NicTxGmii
     void write_one_packet()
     {
         //assert( false and "function write_paket of GMII_TX not defined");
+        if (m_file)
+        {
+            printf("m_file exist\n");
+            uint32_t cpt = 0;
+            uint32_t data = 0;
+            // ecrire dans le fichier (debut de ligne) la valeur de r_counter et un caractere d'espacement
+            m_file << (unsigned)r_counter << ' ';
+            for (cpt = 0; cpt < (r_counter) ; cpt ++) // peut etre (r_counter << 1)
+            {
+                printf("data = %x\n",r_buffer[cpt]);
+                //ecrire simplement dans le fichier r_buffer[cpt]
+                m_file << std::hex << (unsigned)r_buffer[cpt] << " ";
+            }
+            // quand le packet est ecrit en entier ecrire un retour a la ligne dans le fichier
+            m_file << std::dec << std::endl;
+        }
     }
 
 public:
@@ -90,6 +112,7 @@ public:
     {
         if ( not dv and (r_counter != 0) )    // end of packet
         {
+            printf("let's go write one packet\n");
             write_one_packet();
             r_counter = 0;
         }
@@ -105,7 +128,9 @@ public:
     //////////////////////////////////////////////////////////////
     NicTxGmii( const std::string  &name,
                const std::string  &path )
-    : m_name(name)
+    : m_name(name),
+      //m_file(path.c_str(),std::ios::out | std::ios::trunc)
+      m_file(path.c_str(),std::ios::out)
     {
         r_buffer        = new uint8_t[2048];
     } 
@@ -116,6 +141,7 @@ public:
     ~NicTxGmii()
     {
         delete [] r_buffer;
+        m_file.close();
     }
 
 }; // end GmiiTx
