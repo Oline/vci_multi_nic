@@ -78,14 +78,14 @@ class NicTxGmii
         //assert( false and "function write_paket of GMII_TX not defined");
         if (m_file)
         {
-            printf("m_file exist\n");
+            //printf("m_file exist\n");
             uint32_t cpt = 0;
             uint32_t data = 0;
             // ecrire dans le fichier (debut de ligne) la valeur de r_counter et un caractere d'espacement
             m_file << (unsigned)r_counter << ' ';
             for (cpt = 0; cpt < (r_counter) ; cpt ++) // peut etre (r_counter << 1)
             {
-                printf("data = %x\n",r_buffer[cpt]);
+                //printf("data = %x\n",r_buffer[cpt]);
                 //ecrire simplement dans le fichier r_buffer[cpt]
                 m_file << std::hex << (unsigned)r_buffer[cpt] << " ";
             }
@@ -99,7 +99,7 @@ public:
     /////////////
     void reset()
     {
-        r_counter = true;
+        r_counter = 0;
     }
 
     ///////////////////////////////////////////////////////////////////
@@ -112,13 +112,14 @@ public:
     {
         if ( not dv and (r_counter != 0) )    // end of packet
         {
-            printf("let's go write one packet\n");
+            //printf("let's go write one packet\n");
             write_one_packet();
             r_counter = 0;
         }
         else if ( dv )    // running packet
         {
             r_buffer[r_counter] = dt;
+            //printf("r_buffer[%d] in tx_gmii is %x\n",r_counter,r_buffer[r_counter]);
             r_counter           = r_counter + 1;
         }
     } // end put()

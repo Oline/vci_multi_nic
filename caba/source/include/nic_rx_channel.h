@@ -124,6 +124,7 @@ public:
     /////////////
     void reset()
     {
+        uint32_t k;
         r_ptr_word    = 0;
         r_ptr_cont    = 0;
         r_ptw_word    = 32;
@@ -132,6 +133,8 @@ public:
         r_pkt_length  = 0;
         r_sts         = 0;
         r_timer       = m_timeout;
+        for (k = 0; k < 2;k++)
+            memset(r_cont[k], 0, NIC_CONTAINER_SIZE);
     }
 
     /////////////////////////////////////////////////////
@@ -257,7 +260,7 @@ public:
             {
                 //printf("RELEASING CHANNEL RX timer = %d\n",r_timer);
                 r_ptr_word = 0;
-                memset(r_cont[r_ptr_cont], 0, sizeof(r_cont[container_index]));
+                memset(r_cont[r_ptr_cont], 0, NIC_CONTAINER_SIZE);
                 r_ptr_cont = (r_ptr_cont + 1) % 2;
                 //printf("le futur container en lecture sera %d\n",r_ptr_cont);
                 r_sts      = r_sts - 1;
@@ -339,6 +342,10 @@ public:
         r_cont    = new uint32_t*[2];
         r_cont[0] = new uint32_t[NIC_CONTAINER_SIZE];
         r_cont[1] = new uint32_t[NIC_CONTAINER_SIZE];
+        uint32_t k;
+        for (k = 0; k < 2;k++)
+        {
+        }
     } 
 
     //////////////////

@@ -121,7 +121,9 @@ public:
         for ( size_t x=0 ; x<m_buffers ; x++)
         {
             r_eop[x]=0;
+            r_plen[x]=0;
         }
+        memset(r_buf,0,(m_buffers*m_words));
     }
 
     ///////////////////////////////////////////////////////////////////////////

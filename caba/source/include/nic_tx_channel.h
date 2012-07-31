@@ -72,6 +72,9 @@ namespace caba {
 
 using namespace sc_core;
 
+#define NIC_CONTAINER_SIZE      1024 // Size in uint32_t
+
+
     // writer commands (software)
     enum tx_channel_wcmd_t {
         TX_CHANNEL_WCMD_NOP,       // no operation             (channel state not modified)
@@ -84,7 +87,8 @@ using namespace sc_core;
         TX_CHANNEL_RCMD_NOP,       // no operation             (channel state not modified)
         TX_CHANNEL_RCMD_READ,      // read one word            (channel state modified)
         TX_CHANNEL_RCMD_LAST,      // read one word            (channel state modified)
-        TX_CHANNEL_RCMD_RELEASE,   // release container        5channel state modified)
+        TX_CHANNEL_RCMD_RELEASE,   // release container        (channel state modified)
+        TX_CHANNEL_RCMD_SKIP,      // skip current packet      (channel state modified)
     };
 
 class NicTxChannel
@@ -108,12 +112,15 @@ public:
     /////////////
     void reset()
     {
+        uint32_t k;
         r_ptr_word    = 32;
         r_ptr_cont    = 0;
         r_ptw_word    = 0;
         r_ptw_cont    = 0;
         r_pkt_index   = 0;
         r_sts         = 0;
+        for(k = 0;k<2;k++)
+            memset(r_cont[r_ptr_cont], 0,NIC_CONTAINER_SIZE);
     }
 
     /////////////////////////////////////////////////////
@@ -157,7 +164,7 @@ printf("r_sts = %d\n",r_sts);
         
         if ( cmd_r == TX_CHANNEL_RCMD_READ )       // read one packet word
         {
-printf("TX_channel READ\n");
+//printf("TX_channel READ\n");
             assert( (r_ptr_word < 1024) and
                     "ERROR in NIC_TX_CHANNEL : read pointer overflow" );
 
@@ -173,7 +180,7 @@ printf("TX_channel READ\n");
         else if ( cmd_r == TX_CHANNEL_RCMD_LAST )  // read last word in a packet
                                                    // and updates packet index
         {
-printf("TX_channel READ LAST\n");
+//printf("TX_channel READ LAST\n");
             assert( (r_ptw_word < 1024) and 
                     "ERROR in NIC_TX_CHANNEL : write pointer overflow" );
 
@@ -182,7 +189,7 @@ printf("TX_channel READ LAST\n");
 
             if ( r_sts > 0 )  // at least one filled container
             {
-                r_ptw_word               = r_ptw_word + 1;
+                r_ptr_word               = r_ptr_word + 1;
                 r_pkt_index              = r_pkt_index + 1;
             }
             else
@@ -194,9 +201,23 @@ printf("TX_channel READ LAST\n");
         {
 printf("TX_channel RELEASE\n");
             r_pkt_index = 0;
-            r_ptr_word  = 0;
+            r_ptr_word  = 32;
+            memset(r_cont[r_ptr_cont], 0,NIC_CONTAINER_SIZE);
             r_ptr_cont  = (r_ptr_cont + 1) % 2;
             r_sts       = r_sts - 1;
+        }
+
+        else if (cmd_r == TX_CHANNEL_RCMD_SKIP) // skip current packet
+        {
+            uint32_t plen_tmp = this->plen();
+            uint32_t words;
+            if ( (plen_tmp & 0x3) == 0 ) words = plen_tmp >> 2;
+            else                         words = (plen_tmp >> 2) + 1;
+            printf("plen = %d and ptr_word = %d\n", words,r_ptr_word);
+
+            r_ptr_word = r_ptr_word + words ;
+            r_pkt_index = r_pkt_index + 1;
+
         }
         //printf("r_cont[%d][%d] = %x\n",k,r_ptw_word,r_cont[k][r_ptw_word]);
     } // end update()
@@ -218,7 +239,9 @@ printf("TX_channel RELEASE\n");
     { 
         bool        odd     = (r_pkt_index & 0x1);
         uint32_t    word    = (r_pkt_index / 2) + 1;
-
+//        printf("test du plen : odd = %d | r_pkt_index = %d | word = %d \n",odd,r_pkt_index,word);
+//        printf("test du plen :r_cont[0][1]= %x\n",r_cont[0][1]);
+//        printf("test du plen :r_cont[0][2]= %x\n",r_cont[0][2]);
         if ( odd ) return (r_cont[r_ptr_cont][word] >> 16);
         else       return (r_cont[r_ptr_cont][word] & 0x0000FFFF);
     }
@@ -258,8 +281,8 @@ printf("TX_channel RELEASE\n");
     : m_name(name)
     {
         r_cont    = new uint32_t*[2];
-        r_cont[0] = new uint32_t[1024];
-        r_cont[1] = new uint32_t[1024];
+        r_cont[0] = new uint32_t[NIC_CONTAINER_SIZE];
+        r_cont[1] = new uint32_t[NIC_CONTAINER_SIZE];
     } 
 
     //////////////////
