@@ -1,23 +1,23 @@
 /* -*- c++ -*-
  *
  * SOCLIB_LGPL_HEADER_BEGIN
- * 
+ *
  * This file is part of SoCLib, GNU LGPLv2.1.
- * 
+ *
  * SoCLib is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published
  * by the Free Software Foundation; version 2.1 of the License.
- * 
+ *
  * SoCLib is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with SoCLib; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301 USA
- * 
+ *
  * SOCLIB_LGPL_HEADER_END
  *
  * Copyright (c) UPMC, Lip6, Asim
@@ -63,8 +63,12 @@ class VciMultiNic
     // Global CONFIGURATION and STATUS registers
 
     // Channel CONFIGURATION and STATUS registers
-    sc_signal<uint32_t>                     r_channel_mac_4[8];    // MAC address
-    sc_signal<uint32_t>                     r_channel_mac_2[8];    // MAC address extend
+    sc_signal<uint32_t>                     *r_channel_mac_4;                   // MAC address (first 4 bytes)
+    sc_signal<uint32_t>                     *r_channel_mac_2;                   // MAC address (last 2 bytes)
+    sc_signal<uint32_t>                     r_channel_active_channels;          // bitfield where bit N means : 0 -> channel N is disabled, 1 -> channel N is enabled
+    sc_signal<uint32_t>                     r_channel_mac_addr_set;             // bitfield where bit N means : 0 -> channel N has NO MAC addr, 1 -> channel N has a MAC addr set
+    sc_signal<uint32_t>                     *r_channel_;                   // MAC address extend
+
 
     // VCI registers
     sc_signal<int>				            r_vci_fsm;
@@ -75,7 +79,7 @@ class VciMultiNic
     sc_signal<size_t>                       r_vci_channel;          // selected channel
     sc_signal<size_t>                       r_vci_ptw;              // write pointer
     sc_signal<size_t>                       r_vci_ptr;              // read pointer
-    sc_signal<size_t>                       r_vci_nwords;           // word counter (read)
+    sc_signal<size_t>                       r_vci_nwords;           // word counter // ??? (read)
 
     // RX_G2S registers
     sc_signal<int>                          r_rx_g2s_fsm;
@@ -86,11 +90,11 @@ class VciMultiNic
     sc_signal<uint8_t>                      r_rx_g2s_dt3;                     // local data buffer
     sc_signal<uint8_t>                      r_rx_g2s_dt4;                     // local data buffer
     sc_signal<uint8_t>                      r_rx_g2s_dt5;                     // local data buffer
-    sc_signal<size_t>                       r_rx_g2s_delay;                   // delay cycle counter
-    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive;               // packet receive counter
-    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive_crc_success;   // packet receive checksum OK counter
-    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive_crc_fail;      // packet receive checksum KO counter
-    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive_err;           // packet receive ERR counter
+    sc_signal<size_t>                       r_rx_g2s_delay;                   // delay cycle (counter)
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive;               // packet receive (stat counter)
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive_crc_success;   // packet receive checksum OK (stat counter)
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive_crc_fail;      // packet receive checksum KO (stat counter)
+    sc_signal<uint32_t>                     r_rx_g2s_npkt_receive_err;           // packet receive ERR (stat counter)
 
     // RX_DES registers
     sc_signal<int>                          r_rx_des_fsm;
@@ -99,27 +103,27 @@ class VciMultiNic
     sc_signal<uint8_t>*                     r_rx_des_data;                          // array[4]
     //sc_signal<size_t>                       r_rx_des_byte_index;                    // byte index
     //sc_signal<bool>                         r_rx_des_dirty;                         // output fifo modified
-    sc_signal<uint32_t>                     r_rx_des_npkt_receive_err_in_des;         // packet receive drop cause of plen not valid or multi_fifo full(counter)
-    sc_signal<uint32_t>                     r_rx_des_npkt_receive_write_mfifo_success; // packet receive write success in mfifo (counter)
-    sc_signal<uint32_t>                     r_rx_des_npkt_receive_small;               // packet receive err cause of plen < 64 B (counter)
-    sc_signal<uint32_t>                     r_rx_des_npkt_receive_overflow;            // packet receive err cause of plen > 1518 B (counter)
-    sc_signal<uint32_t>                     r_rx_des_npkt_receive_err_mfifo_full;      // packet receive err cause of mfifo full (counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_err_in_des;         // packet receive in error because of plen not valid or multi_fifo is full (stat counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_write_mfifo_success; // packet receive write success in mfifo (stat counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_small;               // packet receive err cause of plen < 64 B (stat counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_overflow;            // packet receive err cause of plen > 1518 B (stat counter)
+    sc_signal<uint32_t>                     r_rx_des_npkt_receive_err_mfifo_full;      // packet receive err cause of mfifo full (stat counter)
 
     // RX_DISPATCH registers
     sc_signal<int>                          r_rx_dispatch_fsm;
-    sc_signal<uint32_t>                     r_rx_dispatch_channel;                       // channel index 
-    sc_signal<bool>                         r_rx_dispatch_bp;                            // fifo index 
+    sc_signal<uint32_t>                     r_rx_dispatch_channel;                       // channel index
+    sc_signal<bool>                         r_rx_dispatch_bp;                            // fifo index
     sc_signal<uint32_t>                     r_rx_dispatch_plen;                          // packet length (bytes)
-    sc_signal<uint32_t>                     r_rx_dispatch_data;                          // word value    
-    sc_signal<uint32_t>                     r_rx_dispatch_words;                         // write words counter
-    sc_signal<uint32_t>                     r_rx_dispatch_npkt_receive_skip_adrmac_fail; // packet receive skip cause of adrmac false counter
-    sc_signal<uint32_t>                     r_rx_dispatch_npkt_receive_wchannel_success; // packet receive write in channel success counter
-    sc_signal<uint32_t>                     r_rx_dispatch_npkt_receive_wchannel_fail;    // packet receive write in channel fail cause of channel full counter
-    
+    sc_signal<uint32_t>                     r_rx_dispatch_data;                          // word value
+    sc_signal<uint32_t>                     r_rx_dispatch_words;                         // write words (counter)
+    sc_signal<uint32_t>                     r_rx_dispatch_npkt_receive_skip_adrmac_fail; // packet receive skip because of mac addr was wrong/not found for any channel (stat counter)
+    sc_signal<uint32_t>                     r_rx_dispatch_npkt_receive_wchannel_success; // packet receive write in channel success (stat counter)
+    sc_signal<uint32_t>                     r_rx_dispatch_npkt_receive_wchannel_fail;    // packet receive write in channel fail because channel was full (stat counter)
+
     // TX_DISPATCH registers
     sc_signal<int>                          r_tx_dispatch_fsm;
     sc_signal<size_t>                       r_tx_dispatch_channel;  // channel index
-    sc_signal<uint32_t>                     r_tx_dispatch_data;     // word value    
+    sc_signal<uint32_t>                     r_tx_dispatch_data;     // word value
     sc_signal<uint32_t>                     r_tx_dispatch_packets;  // number of packets
     sc_signal<uint32_t>                     r_tx_dispatch_words;    // read words counter
     sc_signal<uint32_t>                     r_tx_dispatch_bytes;    // bytes in last word
@@ -140,7 +144,7 @@ class VciMultiNic
     FifoMultiBuffer                         r_rx_fifo_multi;
     GenericFifo<uint16_t>                   r_tx_fifo_stream;
     FifoMultiBuffer                         r_bp_fifo_multi;
-    
+
     // Packet in and out
     NicRxGmii                               r_gmii_rx;
     NicTxGmii                               r_gmii_tx;
@@ -230,7 +234,7 @@ public:
         STREAM_TYPE_ERR,     // corrupted end of stream
         STREAM_TYPE_NEV,     // no special event
     };
-            
+
     // ports
     sc_in<bool> 				            p_clk;
     sc_in<bool> 				            p_resetn;
@@ -251,7 +255,7 @@ public:
 
 }}
 
-#endif 
+#endif
 
 // Local Variables:
 // tab-width: 4

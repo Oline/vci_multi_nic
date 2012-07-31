@@ -27,13 +27,41 @@
 #ifndef MULTI_NIC_REGS_H
 #define MULTI_NIC_REGS_H
 
-enum SoclibMultiNicRegisters {
-    NIC_TX_WOK,
-    NIC_TX_CLOSE,
-    NIC_RX_ROK,
-    NIC_RX_RELEASE,
-    NIC_MAC_4,
-    NIC_MAC_2,
+enum SoclibMultiNicGlobalRegisters {
+    // RX_G2S
+    RX_PKT,                     // Count every packets going through stage 1
+    RX_CRC_SUCCESS,             // Successful CRC packets
+    RX_CRC_FAIL,                // Unsuccessful CRC packets
+    RX_ERR_MII,                 // Error in receiving from (G)MII
+    // RX_DES
+    RX_MFIFO_SUCCESS,           // Count every packets going through stage 2
+    RX_ERR_SMALL,               // Count every too small packet (< 64B)
+    RX_ERR_OVERFLOW,            // Count every too small packet (> 1518B)
+    RX_ERR_MFIFO_FULL,          // Count every packets dropped because of stage 2 full
+    RX_ERR_IN_DES,              // Count every packet received in error (RX_ERR_SMALL + RX_ERR_OVERFLOW + RX_ERR_MFIFO_FULL)
+    // RX_DISPATCH
+    RX_CHANNEL_SUCCESS,         // Count every packets going through stage 3 (final stage)
+    RX_CHANNEL_FAIL,            // Count every packets dropped because of no room in the containers
+    RX_MAC_ADDR_FAIL,           // Count every packets dropped because of mac addr was wrong/not found for any channel
+    // TX_DISPATCH
+    // // TODO
+    // TX_ S2G
+    // // TODO
+    // CHANNEL MANAGEMENT
+    VIS,       // bitfield where bit N means : 0 -> channel N is disabled, 1 -> channel N is enabled
+    GENERAL_CHAN_MAC_ADDR_SET,          // bitfield where bit N means : 0 -> channel N has NO MAC addr, 1 -> channel N has a MAC addr set
+    // CONTROLER MANAGEMENT
+    GENERAL_MAC_4,
+    GENERAL_MAC_2,
+};
+
+enum SoclibMultiNicChannelsRegisters {
+    TX_WOK,
+    TX_CLOSE,
+    RX_ROK,
+    RX_RELEASE,
+    MAC_4,
+    MAC_2,
 };
 
 #endif 
@@ -47,3 +75,4 @@ enum SoclibMultiNicRegisters {
 
 // vim: filetype=cpp:expandtab:shiftwidth=4:tabstop=4:softtabstop=4
 
+ 
