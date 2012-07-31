@@ -80,7 +80,6 @@ class NicTxGmii
         {
             //printf("m_file exist\n");
             uint32_t cpt = 0;
-            uint32_t data = 0;
             // ecrire dans le fichier (debut de ligne) la valeur de r_counter et un caractere d'espacement
             m_file << (unsigned)r_counter << ' ';
             for (cpt = 0; cpt < (r_counter) ; cpt ++) // peut etre (r_counter << 1)

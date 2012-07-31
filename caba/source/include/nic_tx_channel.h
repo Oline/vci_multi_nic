@@ -73,7 +73,8 @@ namespace caba {
 using namespace sc_core;
 
 #define NIC_CONTAINER_SIZE      1024 // Size in uint32_t
-
+#define NIC_CONTAINER_SIZE_BYTES    NIC_CONTAINER_SIZE*4
+#define MAX_PACKET                  ((NIC_CONTAINER_SIZE_BYTES-4)/62)
 
     // writer commands (software)
     enum tx_channel_wcmd_t {
@@ -113,7 +114,7 @@ public:
     void reset()
     {
         uint32_t k;
-        r_ptr_word    = 32;
+        r_ptr_word    = (MAX_PACKET/2)+1;
         r_ptr_cont    = 0;
         r_ptw_word    = 0;
         r_ptw_cont    = 0;
@@ -137,7 +138,7 @@ public:
 
         if ( cmd_w == TX_CHANNEL_WCMD_WRITE )       // write one container word
         {
-            assert( (r_ptw_word < 1024) and 
+            assert( (r_ptw_word < NIC_CONTAINER_SIZE) and 
                     "ERROR in NIC_TX_CHANNEL : write pointer overflow" );
 
             if ( r_sts < 2 )  // at least one empty container
@@ -165,7 +166,7 @@ printf("r_sts = %d\n",r_sts);
         if ( cmd_r == TX_CHANNEL_RCMD_READ )       // read one packet word
         {
 //printf("TX_channel READ\n");
-            assert( (r_ptr_word < 1024) and
+            assert( (r_ptr_word < NIC_CONTAINER_SIZE) and
                     "ERROR in NIC_TX_CHANNEL : read pointer overflow" );
 
             if ( r_sts > 0 )  // at least one filled container
@@ -181,10 +182,10 @@ printf("r_sts = %d\n",r_sts);
                                                    // and updates packet index
         {
 //printf("TX_channel READ LAST\n");
-            assert( (r_ptw_word < 1024) and 
+            assert( (r_ptw_word < NIC_CONTAINER_SIZE) and 
                     "ERROR in NIC_TX_CHANNEL : write pointer overflow" );
 
-            assert( (r_pkt_index < 61) and
+            assert( (r_pkt_index < MAX_PACKET) and
                     "ERROR in NIC_TX_CHANNEL : packet index larger than 61" );
 
             if ( r_sts > 0 )  // at least one filled container
@@ -201,7 +202,7 @@ printf("r_sts = %d\n",r_sts);
         {
 printf("TX_channel RELEASE\n");
             r_pkt_index = 0;
-            r_ptr_word  = 32;
+            r_ptr_word  = (MAX_PACKET/2)+1;;
             memset(r_cont[r_ptr_cont], 0,NIC_CONTAINER_SIZE);
             r_ptr_cont  = (r_ptr_cont + 1) % 2;
             r_sts       = r_sts - 1;

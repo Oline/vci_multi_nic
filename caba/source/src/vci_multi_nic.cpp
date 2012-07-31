@@ -532,8 +532,8 @@ printf("RX_RELEASE !!!\n");
                              (uint32_t)r_rx_g2s_dt2.read() << 16 | 
                              (uint32_t)r_rx_g2s_dt1.read() << 24 ; 
 
-//printf("\nCHECK = %x\n",check);
-//printf("CHECKSUM_READ = %x\n",r_rx_g2s_checksum.read());
+printf("\nCHECK = %x\n",check);
+printf("CHECKSUM_READ = %x\n",r_rx_g2s_checksum.read());
                 //
                 r_rx_g2s_npkt = r_rx_g2s_npkt.read() + 1;
 
@@ -1335,7 +1335,7 @@ printf("PACKET TOO SMALL\n");
             // Will write only if :
             // - There is enough space
             // - There is enough time to write it
-            if ((plen < space) && ((((int32_t)plen >> 2) + 1) < r_rx_channel[channel]->get_r_timer()))
+            if ((plen <= space) && ((((int32_t)plen >> 2) + 1) < r_rx_channel[channel]->get_r_timer()))
                 r_rx_dispatch_fsm = RX_DISPATCH_READ_WRITE;
             else
                 r_rx_dispatch_fsm = RX_DISPATCH_CLOSE_CONT;

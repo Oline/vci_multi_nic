@@ -83,7 +83,9 @@ namespace caba {
 
 using namespace sc_core;
 
-#define NIC_CONTAINER_SIZE      1024 // Size in uint32_t
+#define NIC_CONTAINER_SIZE          1024 // Size in uint32_t
+#define NIC_CONTAINER_SIZE_BYTES    NIC_CONTAINER_SIZE*4
+#define MAX_PACKET                  ((NIC_CONTAINER_SIZE_BYTES-4)/62)
 
 // writer commands
 enum rx_channel_wcmd_t {
@@ -104,7 +106,7 @@ class NicRxChannel
 {
     // structure constants
     const std::string   m_name;
-    const uint32_t      m_timeout;           // max waiting cycles
+    uint32_t      m_timeout;           // max waiting cycles
 
     // registers
     uint32_t            r_ptw_word;          // word write pointer (in container)
@@ -127,7 +129,7 @@ public:
         uint32_t k;
         r_ptr_word    = 0;
         r_ptr_cont    = 0;
-        r_ptw_word    = 32;
+        r_ptw_word    = (MAX_PACKET/2)+1;
         r_ptw_cont    = 0;
         r_pkt_index   = 0;
         r_pkt_length  = 0;
@@ -155,7 +157,7 @@ public:
         // WCMD registers update (depends only on cmd_w)
         if ( cmd_w == RX_CHANNEL_WCMD_WRITE )      // write one packet word
             {
-                assert( (r_ptw_word < 1024) and 
+                assert( (r_ptw_word < NIC_CONTAINER_SIZE) and 
                         "ERROR in NIC_RX_CHANNEL : write pointer overflow" );
 
                 if ( r_sts < 2 )    // at least one empty container
@@ -175,10 +177,10 @@ public:
         else if ( cmd_w == RX_CHANNEL_WCMD_LAST )  // write last word in a packet
             // and write packet length
             {
-                assert( (r_ptw_word < 1024) and 
+                assert( (r_ptw_word < NIC_CONTAINER_SIZE) and 
                         "ERROR in NIC_RX_CHANNEL : write pointer overflow" );
 
-                assert( (r_pkt_index < 62) and
+                assert( (r_pkt_index < MAX_PACKET) and
                         "ERROR in NIC_RX_CHANNEL : packet index larger than 61" );
 
                 if ( r_sts < 2 )    // at least one container writable
@@ -208,7 +210,7 @@ public:
             {
                 //r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
                 r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
-                r_ptw_word                  = 32;
+                r_ptw_word                  =  ((MAX_PACKET>>1)+1);
                 r_ptw_cont                  = (r_ptw_cont + 1) % 2;
                 r_sts                       = r_sts + 1;
                 r_pkt_index                 = 0;
@@ -223,7 +225,7 @@ public:
                         printf("CLOSE BY TIMEOUT\n");
                         //r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
                         r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
-                        r_ptw_word                  = 32;
+                        r_ptw_word                  =((MAX_PACKET>>1)+1);
                         r_ptw_cont                  = (r_ptw_cont + 1) % 2;
                         r_sts                       = r_sts + 1;
                         r_pkt_index                 = 0;
@@ -232,7 +234,7 @@ public:
             }
 
         // timer decrement if container not empty AND 1 byte has been writen
-        if (r_ptw_word > 32) 
+        if (r_ptw_word > ((MAX_PACKET>>1)+1) ) 
             {
                 // decrement only if 1 Byte/Word has been writen
                 r_timer = r_timer - 1;
@@ -243,7 +245,7 @@ public:
         if ( cmd_r == RX_CHANNEL_RCMD_READ )       // read one container word
             {
                 //printf("READING CHANNEL RX timer = %d\n",r_timer);
-                assert( (r_ptr_word < 1024) and
+                assert( (r_ptr_word < NIC_CONTAINER_SIZE) and
                         "ERROR in NIC_RX_CHANNEL : read pointer overflow" );
                 //printf("le container lu est %d\n",container_index);
                 if ( r_sts > 0 )    // at least one filled container
@@ -321,13 +323,17 @@ public:
     {
         return r_timer;
     }
-
+    
+    void set_timeout (uint32_t timeout)
+    {
+        m_timeout = timeout;
+    }
     //////////////////////////////////////////////////////////////
     // constructor checks parameters and allocates the memory
     // for the containers.
     //////////////////////////////////////////////////////////////
     NicRxChannel( const std::string  &name,
-                  const uint32_t     timeout )
+                  uint32_t     timeout )
         : m_name(name),
           m_timeout(timeout)
     {
@@ -342,10 +348,6 @@ public:
         r_cont    = new uint32_t*[2];
         r_cont[0] = new uint32_t[NIC_CONTAINER_SIZE];
         r_cont[1] = new uint32_t[NIC_CONTAINER_SIZE];
-        uint32_t k;
-        for (k = 0; k < 2;k++)
-        {
-        }
     } 
 
     //////////////////
