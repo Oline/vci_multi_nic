@@ -143,16 +143,29 @@ public:
         // WCMD registers update (depends only on cmd_w)
         if ( cmd_w == FIFO_MULTI_WCMD_WRITE )       // write one word 
         {
-            /*printf("\n***** STATUS FIFO MULTI IN WCMD = WRITE *****\n");
-            printf("fifo_multi : r_ptw = %d\n",r_ptw);
-            printf("fifo_multi : r_word_count = %d\n",r_word_count);
-            printf("fifo_multi : r_sts = %d\n",r_sts);
-            printf("fifo_multi : ptw_word = %d\n",ptw_word);*/
+// #ifdef SOCLIB_DEBUG_NIC
+//             printf("\n***** STATUS FIFO MULTI IN WCMD = WRITE *****\n");
+//             printf("fifo_multi : r_ptw = %d\n",r_ptw);
+//             printf("fifo_multi : r_word_count = %d\n",r_word_count);
+//             printf("fifo_multi : r_sts = %d\n",r_sts);
+//             printf("fifo_multi : ptw_word = %d\n",ptw_word);
+// #endif
+            // Data to write
             r_buf[r_ptw]               = dtin;
+            
+            // Counting how many words are writen to be able to 
+            // compute plen
             r_word_count               = r_word_count + 1;
-            r_ptw                      = (r_ptw + 1) % (m_buffers * m_words);
-            if ( ptw_word == 0)
+
+            // If we are writing the last word of a buffer,
+            // we mark this buffer as full
+            if (ptw_word == m_word_mask)
                 r_sts = r_sts - 1; 
+
+            // If last word of a buffer, we go to the next buffer
+            // else we continue in that buffer
+            r_ptw = (r_ptw + 1) % (m_buffers * m_words);
+
             /*printf("\n** STATUS FIFO MULTI after WRITE **\n");
             printf("fifo_multi : r_ptw = %d\n",r_ptw);
             printf("fifo_multi : r_word_count = %d\n",r_word_count);
@@ -169,9 +182,15 @@ public:
             //printf("fifo_multi : ptw_buf = %x\n",ptw_buf);
             r_ptw_buf_save             = (ptw_buf + 1) % m_buffers;
             r_word_count               = 0;
-            r_ptw                      = ((ptw_buf + 1) % m_buffers) * m_words;
-            if ( ptw_word == 0)
-                r_sts = r_sts - 1; 
+
+            // Going to next buffer
+            // m_words -> used to shift left to set ptw_buf value to the msb
+            r_ptw = ((ptw_buf + 1) % m_buffers) * m_words;
+
+            // In any case, we consume a buffer when finishing
+            // to write a packet.
+            r_sts = r_sts - 1; 
+
             //printf("fifo_multi : r_ptw = %x\n",r_ptw);
             //printf("fifo_multi : r_word_count = %x\n",r_word_count);
             //printf("fifo_multi : r_sts = %x\n",r_sts);
@@ -204,7 +223,8 @@ public:
         if ( cmd_r == FIFO_MULTI_RCMD_READ )    // read one word
         {
             r_ptr                                = (r_ptr + 1) % (m_buffers * m_words);
-            if ( ptr_word == (m_words-1) ) r_sts = r_sts + 1;
+            if ( ptr_word == (m_words-1) )
+                r_sts = r_sts + 1;
         }
         else if ( cmd_r == FIFO_MULTI_RCMD_LAST ) // read last word
         {

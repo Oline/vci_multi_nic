@@ -2185,6 +2185,9 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
     r_rx_channel = new NicRxChannel*[channels];
     r_tx_channel = new NicTxChannel*[channels];
 
+    r_channel_mac_4 = new sc_signal<uint32_t>*[channels];
+    r_channel_mac_2 = new sc_signal<uint32_t>*[channels];
+
     for ( size_t k=0 ; k<channels ; k++)
     {
         r_rx_channel[k] = new NicRxChannel("r_rx_channel", timeout);
