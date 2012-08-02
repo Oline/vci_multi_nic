@@ -104,6 +104,7 @@ class NicTxChannel
     uint32_t            r_ptr_cont;          // container read pointer
     uint32_t            r_sts;               // number of filled containers
     uint32_t            r_pkt_index;         // packet index in a container
+    uint32_t            r_ptr_first;         // ptr_word at word[0] in current packet
 
     // containers
     uint32_t**          r_cont;              // data[2][1024]
@@ -115,6 +116,7 @@ public:
     {
         uint32_t k;
         r_ptr_word    = (MAX_PACKET/2)+1;
+        r_ptr_first   = (MAX_PACKET/2)+1;
         r_ptr_cont    = 0;
         r_ptw_word    = 0;
         r_ptw_cont    = 0;
@@ -192,6 +194,7 @@ printf("r_sts = %d\n",r_sts);
             {
                 r_ptr_word               = r_ptr_word + 1;
                 r_pkt_index              = r_pkt_index + 1;
+                r_ptr_first              = r_ptr_word;
             }
             else
             {
@@ -202,7 +205,8 @@ printf("r_sts = %d\n",r_sts);
         {
 printf("TX_channel RELEASE\n");
             r_pkt_index = 0;
-            r_ptr_word  = (MAX_PACKET/2)+1;;
+            r_ptr_word  = (MAX_PACKET/2)+1;
+            r_ptr_first  = (MAX_PACKET/2)+1;
             memset(r_cont[r_ptr_cont], 0,NIC_CONTAINER_SIZE);
             r_ptr_cont  = (r_ptr_cont + 1) % 2;
             r_sts       = r_sts - 1;
@@ -214,10 +218,11 @@ printf("TX_channel RELEASE\n");
             uint32_t words;
             if ( (plen_tmp & 0x3) == 0 ) words = plen_tmp >> 2;
             else                         words = (plen_tmp >> 2) + 1;
-            printf("plen = %d and ptr_word = %d\n", words,r_ptr_word);
+            //printf("plen = %d and ptr_word = %d\n", words,r_ptr_word);
 
-            r_ptr_word = r_ptr_word + words ;
+            r_ptr_word = r_ptr_first + words ;
             r_pkt_index = r_pkt_index + 1;
+            r_ptr_first              = r_ptr_word;
 
         }
         //printf("r_cont[%d][%d] = %x\n",k,r_ptw_word,r_cont[k][r_ptw_word]);

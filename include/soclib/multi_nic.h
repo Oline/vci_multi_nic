@@ -28,6 +28,12 @@
 #define MULTI_NIC_REGS_H
 
 enum SoclibMultiNicGlobalRegisters {
+    TX_WOK,
+    TX_CLOSE,
+    RX_ROK,
+    RX_RELEASE,
+    MAC_4,
+    MAC_2,
     // RX_G2S
     RX_PKT,                     // Count every packets going through stage 1
     RX_CRC_SUCCESS,             // Successful CRC packets
@@ -44,7 +50,9 @@ enum SoclibMultiNicGlobalRegisters {
     RX_CHANNEL_FAIL,            // Count every packets dropped because of no room in the containers
     RX_MAC_ADDR_FAIL,           // Count every packets dropped because of mac addr was wrong/not found for any channel
     // TX_DISPATCH
-    // // TODO
+    TX_PKT,
+    TX_ERR_SMALL,
+    TX_ERR_OVERFLOW,
     // TX_ S2G
     // // TODO
     // CHANNEL MANAGEMENT
@@ -55,14 +63,9 @@ enum SoclibMultiNicGlobalRegisters {
     GENERAL_MAC_2,
 };
 
-enum SoclibMultiNicChannelsRegisters {
-    TX_WOK,
-    TX_CLOSE,
-    RX_ROK,
-    RX_RELEASE,
-    MAC_4,
-    MAC_2,
-};
+/*enum SoclibMultiNicChannelsRegisters {
+
+};*/
 
 #endif 
 

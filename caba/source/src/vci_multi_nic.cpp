@@ -85,6 +85,115 @@ static uint32_t crc_table[] =
 
 #define tmpl(t) template<typename vci_param> t VciMultiNic<vci_param>
 
+tmpl(uint32_t)::set_sel_register(uint32_t addr)
+{
+    uint32_t sel_register;
+    size_t channel = (size_t)((addr & 0x0001C000) >> 14);
+    size_t cell    = (size_t)((addr & 0x00001FFF) >> 2);
+    //bool   burst   = (addr & 0x00002000);
+
+    if ( p_vci.rspack.read() )
+    {
+                switch(cell)
+                {
+                    case RX_ROK :
+                    {
+                        sel_register = r_rx_channel[channel]->rok();
+                        break;
+                    }
+                    case RX_PKT :
+                    {
+                        sel_register = r_rx_g2s_npkt.read();
+                        //printf("sel_register RX_PKT = %d\n",sel_register);
+                        break;
+                    }
+                    case RX_CRC_SUCCESS :
+                    {
+                        sel_register = r_rx_g2s_npkt_crc_success.read();
+                        //printf("sel_register RX_CRC_SUCCESS = %d\n",sel_register);
+                        break;
+                    }
+                    case RX_CRC_FAIL :
+                    {
+                        sel_register = r_rx_g2s_npkt_crc_fail.read();
+                        //printf("sel_register RX_CRC_FAIL = %d\n",sel_register);
+                        break;
+                    }
+                    case RX_ERR_MII :
+                    {
+                        sel_register = r_rx_g2s_npkt_err.read();
+                        break;
+                    }
+                    case RX_MFIFO_SUCCESS :
+                    {
+                        sel_register = r_rx_des_npkt_write_mfifo_success.read();
+                        //printf("sel_register MFIFO_SUCCESS = %d\n",sel_register);
+                        break;
+                    }
+                    case RX_ERR_SMALL :
+                    {
+                        sel_register = r_rx_des_npkt_small.read();
+                        break;
+                    }
+                    case RX_ERR_OVERFLOW :
+                    {
+                        sel_register = r_rx_des_npkt_overflow.read();
+                        break;
+                    }
+                    case RX_ERR_MFIFO_FULL :
+                    {
+                        sel_register =r_rx_des_npkt_err_mfifo_full.read();
+                        break;
+                    }
+                    case RX_ERR_IN_DES :
+                    {
+                        sel_register = r_rx_des_npkt_err_in_des.read();
+                        break;
+                    }
+                    case RX_CHANNEL_SUCCESS :
+                    {
+                        sel_register = r_rx_dispatch_npkt_wchannel_success.read();
+                        break;
+                    }
+                    case RX_CHANNEL_FAIL :
+                    {
+                        sel_register = r_rx_dispatch_npkt_wchannel_fail.read();
+                        break;
+                    }
+                    case RX_MAC_ADDR_FAIL :
+                    {
+                        sel_register = r_rx_dispatch_npkt_skip_adrmac_fail.read();
+                        //printf("sel_register MAC ADDR FAIL = %d\n",sel_register);
+                        break;
+                    }
+                    case TX_PKT :
+                    {
+                        sel_register = r_tx_npkt.read();
+                        break;
+                    }
+                    case TX_ERR_SMALL :
+                    {
+                        sel_register = r_tx_npkt_small.read();
+                        break;
+                    }
+                    case TX_ERR_OVERFLOW :
+                    {
+                        sel_register = r_tx_npkt_overflow.read();
+                        break;
+                    }
+                    case TX_WOK :
+                    {
+                        sel_register = r_tx_channel[channel]->wok();
+                        break;
+                    }
+              }//end switch cell
+    }
+    return sel_register;
+}
+
+
+
+
 /////////////////////////
 tmpl(void)::transition()
 {
@@ -127,7 +236,12 @@ tmpl(void)::transition()
         r_tx_npkt_overflow = 0;
         r_tx_npkt_small = 0;
         r_tx_npkt = 0;
-
+        r_tx_dispatch_interne = 0;
+        r_tx_dispatch_dt0 = 0;
+        r_tx_dispatch_dt1 = 0;
+        r_tx_dispatch_dt2 = 0;
+        r_tx_dispatch_addr_mac_src_fail = 0;
+        r_tx_dispatch_pipe_count = 2;
        
 
         r_rx_fifo_stream.init();
@@ -170,6 +284,7 @@ tmpl(void)::transition()
         {
             if (p_vci.cmdval.read() )
             {
+            //printf("VCI_IDLE\n");
                 typename vci_param::addr_t	address = p_vci.address.read();
                 typename vci_param::cmd_t	cmd     = p_vci.cmd.read();
                 typename vci_param::plen_t  plen    = p_vci.plen.read();
@@ -191,7 +306,7 @@ tmpl(void)::transition()
                 bool   burst   = (address & 0x00001000);*/
 
                 size_t channel = (size_t)((address & 0x0001C000) >> 14);
-                size_t cell    = (size_t)((address & 0x00000FFF) >> 2);
+                size_t cell    = (size_t)((address & 0x00001FFF) >> 2);
                 bool   burst   = (address & 0x00002000);
                 
 //printf("channel = %d\n",(uint32_t)channel);
@@ -214,44 +329,157 @@ tmpl(void)::transition()
                     r_vci_nwords  = (size_t)(plen >> 2);
                     r_vci_fsm     = VCI_READ_RX_BURST;
                 }
+                
+                else if ( not burst and (cmd == vci_param::CMD_READ) )           // REG read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : TX_WOK read access must be one flit");
+                    r_vci_fsm = VCI_READ_REG;
+                }
+                /*
                 else if ( not burst and (cmd == vci_param::CMD_READ) and
-                          (cell == NIC_TX_WOK ) )           // TX_WOK read access
+                          (cell == TX_WOK ) )           // TX_WOK read access
                 {
                     assert( p_vci.eop.read() and
                     "ERROR in VCI_MULTI_NIC : TX_WOK read access must be one flit");
                     r_vci_fsm = VCI_READ_TX_WOK;
                 }
                 else if ( not burst and (cmd == vci_param::CMD_READ) and
-                          (cell == NIC_RX_ROK ) )           // RX_ROK read access
+                          (cell == RX_ROK ) )           // RX_ROK read access
                 {
                     assert( p_vci.eop.read() and
                     "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
                     r_vci_fsm = VCI_READ_RX_ROK;
                 }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_PKT ) )           // RX_PKT read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_PKT;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_CRC_SUCCESS ) )           // RX_CRC_SUCCESS read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_CRC_SUCCESS;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_CRC_FAIL ) )           // RX_CRC_FAIL read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_CRC_FAIL;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_ERR_MII ) )           // RX_ERR_MII read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_ERR_MII;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_MFIFO_SUCCESS ) )           // RX_MFIFO_SUCCESS read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_MFIFO_SUCCESS;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_ERR_SMALL ) )           // RX_ERR_SMALL read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_ERR_SMALL;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_ERR_OVERFLOW ) )           // RX_ERR_OVERFLOW read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_ERR_OVERFLOW;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_ERR_MFIFO_FULL ) )           // RX_ERR_MFIFO_FULL read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_ERR_MFIFO_FULL;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_ERR_IN_DES ) )           // RX_ERR_IN_DES read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_ERR_IN_DES;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_CHANNEL_SUCCESS ) )           // RX_CHANNEL_SUCCESS read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_CHANNEL_SUCCESS;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_CHANNEL_FAIL ) )           // RX_CHANNEL_FAIL read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_CHANNEL_FAIL;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == RX_MAC_ADDR_FAIL ) )           // RX_MAC_ADDR_FAIL read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_RX_MAC_ADDR_FAIL;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == TX_PKT ) )           // TX_PKT read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_TX_PKT;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == TX_ERR_SMALL ) )           // TX_ERR_SMALL read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_TX_ERR_SMALL;
+                }
+                else if ( not burst and (cmd == vci_param::CMD_READ) and
+                          (cell == TX_ERR_OVERFLOW ) )           // TX_ERR_OVERFLOW read access
+                {
+                    assert( p_vci.eop.read() and
+                    "ERROR in VCI_MULTI_NIC : RX_ROK read access must be one flit");
+                    r_vci_fsm = VCI_READ_TX_ERR_OVERFLOW;
+                }*/
                 else if ( not burst and (cmd == vci_param::CMD_WRITE) and
-                          (cell == NIC_TX_CLOSE) )          // TX_CLOSE write access
+                          (cell == TX_CLOSE) )          // TX_CLOSE write access
                 {
                     assert( p_vci.eop.read() and
                     "ERROR in VCI_MULTI_NIC : TX_CLOSE write access must be one flit");
                     r_vci_fsm = VCI_WRITE_TX_CLOSE;
                 }
                 else if ( not burst and (cmd == vci_param::CMD_WRITE) and
-                          (cell == NIC_RX_RELEASE) )         // RX_RELEASE write access
+                          (cell == RX_RELEASE) )         // RX_RELEASE write access
                 {
-printf("RX_RELEASE !!!\n");
+//printf("RX_RELEASE !!!\n");
                     assert( p_vci.eop.read() and
                     "ERROR in VCI_MULTI_NIC : RX_RELEASE write access must be one flit");
                     r_vci_fsm = VCI_WRITE_RX_RELEASE;
                 }
                 else if ( not burst and (cmd == vci_param::CMD_WRITE) and
-                          (cell == NIC_MAC_4) )             // MAC_4 write access
+                          (cell == MAC_4) )             // MAC_4 write access
                 {
                     assert( p_vci.eop.read() and
                     "ERROR in VCI_MULTI_NIC : MAC_4 write access must be one flit");
                     r_vci_fsm = VCI_WRITE_MAC_4;
                 }
                 else if ( not burst and (cmd == vci_param::CMD_WRITE) and
-                          (cell == NIC_MAC_2) )             // MAC_2 write access
+                          (cell == MAC_2) )             // MAC_2 write access
                 {
                     assert( p_vci.eop.read() and
                     "ERROR in VCI_MULTI_NIC : MAC_2 write access must be one flit");
@@ -286,14 +514,10 @@ printf("RX_RELEASE !!!\n");
                 "ERROR in VCI_MULTI_NIC : address must be contiguous in VCI_WRITE_TX_BURST");
 
                 r_vci_wdata      = p_vci.wdata.read();
-//printf("r_vci_data read success\n");
                 r_vci_ptw        = r_vci_ptw.read() + 1;
-//printf("r_vci_ptw ++ success\n");
                 if ( p_vci.eop.read() )
                 {
-//printf("entre dans le if p_vci.eop\n");
                     r_vci_fsm = VCI_WRITE_TX_LAST;
-//printf("sort du le if p_vci.eop\n");
                 }
             }
             break;
@@ -311,6 +535,7 @@ printf("RX_RELEASE !!!\n");
             }
             break;
         }
+        /*
         /////////////////////
         case VCI_READ_TX_WOK:   // send tx_channnel WOK in VCI response
         {
@@ -320,6 +545,8 @@ printf("RX_RELEASE !!!\n");
             }
             break;
         }
+        */
+
         ////////////////////////
         case VCI_WRITE_TX_CLOSE: // close tx_channel, reset r_vci_ptw pointer
                                  // and send VCI write response
@@ -351,6 +578,127 @@ printf("RX_RELEASE !!!\n");
             break;
         }
         /////////////////////
+        case VCI_READ_REG:   // send REG value in VCI response
+        {
+//printf("VCI_READ_REG\n");
+  //              typename vci_param::addr_t	address = p_vci.address.read();
+//printf("addr vci = %x\n",(uint32_t)address);
+    //            assert ( (m_segment.contains(address)) and
+      //          "ERROR in VCI_MULTI_NIC : ADDRESS is out of segment");
+
+        //        size_t channel = r_vci_channel.read();
+          //      size_t cell    = (size_t)((address & 0x00001FFF) >> 2);
+
+            if ( p_vci.rspack.read() )
+            {
+               /* switch(cell)
+                {
+                    case RX_ROK :
+                    {
+printf("VCI_READ_RX_ROK\n");
+                        sel_register = r_rx_channel[channel]->rok();
+printf("sel_register in VCI_TRANSITION = %d\n",sel_register.get_new_value());
+                        break;
+                    }
+                    case RX_PKT :
+                    {
+printf("VCI_READ_RX_PKT\n");
+                        sel_register = r_rx_g2s_npkt.read();
+                        break;
+                    }
+                    case RX_CRC_SUCCESS :
+                    {
+printf("VCI_READ_RX_CRC_SUCCESS\n");
+                        sel_register = r_rx_g2s_npkt_crc_success.read();
+                        break;
+                    }
+                    case RX_CRC_FAIL :
+                    {
+printf("VCI_READ_RX_CRC_FAIL\n");
+                        sel_register = r_rx_g2s_npkt_crc_fail.read();
+                        break;
+                    }
+                    case RX_ERR_MII :
+                    {
+printf("VCI_READ_RX_ERR_MII\n");
+                        sel_register = r_rx_g2s_npkt_err.read();
+                        break;
+                    }
+                    case RX_MFIFO_SUCCESS :
+                    {
+printf("VCI_READ_RX_MFIFO_SUCCESS\n");
+                        sel_register = r_rx_des_npkt_write_mfifo_success.read();
+                        break;
+                    }
+                    case RX_ERR_SMALL :
+                    {
+printf("VCI_READ_RX_ERR_SMALL\n");
+                        sel_register = r_rx_des_npkt_small.read();
+                        break;
+                    }
+                    case RX_ERR_OVERFLOW :
+                    {
+printf("VCI_READ_RX_ERR_OVERFLOW\n");
+                        sel_register = r_rx_des_npkt_overflow.read();
+                        break;
+                    }
+                    case RX_ERR_MFIFO_FULL :
+                    {
+printf("VCI_READ_RX_ERR_MFIFO_FULL\n");
+                        sel_register = r_rx_des_npkt_err_in_des.read();
+                        break;
+                    }
+                    case RX_CHANNEL_SUCCESS :
+                    {
+printf("VCI_READ_RX_CHANNEL_SUCCESS\n");
+                        sel_register = r_rx_dispatch_npkt_wchannel_success.read();
+                        break;
+                    }
+                    case RX_CHANNEL_FAIL :
+                    {
+printf("VCI_READ_RX_CHANNEL_FAIL\n");
+                        sel_register = r_rx_dispatch_npkt_wchannel_fail.read();
+                        break;
+                    }
+                    case RX_MAC_ADDR_FAIL :
+                    {
+printf("VCI_READ_RX_MAC_ADDR_FAIL\n");
+                        sel_register = r_rx_dispatch_npkt_skip_adrmac_fail.read();
+                        break;
+                    }
+                    case TX_PKT :
+                    {
+printf("VCI_READ_TX_PKT\n");
+                        sel_register = r_tx_npkt.read();
+                        break;
+                    }
+                    case TX_ERR_SMALL :
+                    {
+printf("VCI_READ_TX_ERR_SMALL\n");
+                        sel_register = r_tx_npkt_small.read();
+                        break;
+                    }
+                    case TX_ERR_OVERFLOW :
+                    {
+printf("VCI_READ_TX_ERR_OVERFLOW\n");
+                        sel_register = r_tx_npkt_overflow.read();
+                        break;
+                    }
+                    case TX_WOK :
+                    {
+printf("VCI_READ_TX_WOK\n");
+                        sel_register = r_tx_channel[channel]->wok();
+                        break;
+                    }
+                }//end switch cell
+            */
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+
+        /*
+        /////////////////////
         case VCI_READ_RX_ROK:   // send rx_channel ROK in VCI response
         {
             if ( p_vci.rspack.read() )
@@ -359,6 +707,141 @@ printf("RX_RELEASE !!!\n");
             }
             break;
         }
+        /////////////////////
+        case VCI_READ_RX_PKT:   // send rx_channel RX_PKT in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_CRC_SUCCESS:   // send rx_channel RX_CRC_SUCCESS in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_CRC_FAIL:   // send rx_channel RX_CRC_FAIL in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_ERR_MII:   // send rx_channel RX_ERR_MII in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_MFIFO_SUCCESS:   // send rx_channel RX_MFIFO_SUCCESS in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_ERR_SMALL:   // send rx_channel RX_ERR_SMALL in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_ERR_OVERFLOW:   // send rx_channel RX_ERR_OVERFLOW in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_ERR_MFIFO_FULL:   // send rx_channel RX_ERR_MFIFO_FULL in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_ERR_IN_DES:   // send rx_channel RX_ERR_IN_DES in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_CHANNEL_SUCCESS:   // send rx_channel RX_CHANNEL_SUCCESS in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_CHANNEL_FAIL:   // send rx_channel RX_CHANNEL_FAIL in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_RX_MAC_ADDR_FAIL:   // send rx_channel RX_MAC_ADDr_FAIL in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_TX_PKT:   // send tx_channel TX_PKT in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_TX_ERR_SMALL:   // send tx_channel TX_ERR_SMALL in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }
+        /////////////////////
+        case VCI_READ_TX_ERR_OVERFLOW:   // send tx_channel TX_ERR_OVERFLOW in VCI response
+        {
+            if ( p_vci.rspack.read() )
+            {
+                r_vci_fsm = VCI_IDLE;
+            }
+            break;
+        }*/
         //////////////////////////
         case VCI_WRITE_RX_RELEASE:   // release tx_channel, reset r_vci_ptr,
                                     // and send VCI write response
@@ -532,10 +1015,11 @@ printf("RX_RELEASE !!!\n");
                              (uint32_t)r_rx_g2s_dt2.read() << 16 | 
                              (uint32_t)r_rx_g2s_dt1.read() << 24 ; 
 
-printf("\nCHECK = %x\n",check);
-printf("CHECKSUM_READ = %x\n",r_rx_g2s_checksum.read());
+//printf("\nCHECK = %x\n",check);
+//printf("CHECKSUM_READ = %x\n",r_rx_g2s_checksum.read());
                 //
                 r_rx_g2s_npkt = r_rx_g2s_npkt.read() + 1;
+//printf("r_rx_npkt = %d\n",r_rx_g2s_npkt.read());
 
             if ( r_rx_g2s_checksum.read() == check )
             {
@@ -543,6 +1027,7 @@ printf("CHECKSUM_READ = %x\n",r_rx_g2s_checksum.read());
                 rx_fifo_stream_write = true;
                 rx_fifo_stream_wdata = r_rx_g2s_dt5.read() | (STREAM_TYPE_EOS << 8);
                 r_rx_g2s_npkt_crc_success = r_rx_g2s_npkt_crc_success.read() + 1;
+//printf("r_rx_npkt_crc_success = %d\n",r_rx_g2s_npkt_crc_success.read());
             }
             else
             {
@@ -985,6 +1470,7 @@ printf("PACKET TOO SMALL\n");
 		    rx_des_packet_overflow = false;
             
             r_rx_des_npkt_err_in_des = r_rx_des_npkt_err_in_des.read() + 1;
+//printf("r_rx_des_npkt_err_in_des = %d\n",r_rx_des_npkt_err_in_des.read());
 		
 		    r_rx_des_fsm        = RX_DES_READ_0;
 	    }
@@ -1281,8 +1767,6 @@ printf("PACKET TOO SMALL\n");
             
             for ( size_t k = 0 ; (k < m_channels) and not found ; k++ )
             {
-//printf("MAC address 4 for channel[%d] = %x\n",k,r_rx_dispatch_data.read());
-//printf("MAC address 2 for channel[%d] = %x\n",k,data_ext);
                 if ( (r_channel_mac_4[k].read() == r_rx_dispatch_data.read() ) and
                      (r_channel_mac_2[k].read() == data_ext) )
                 {
@@ -1294,7 +1778,10 @@ printf("PACKET TOO SMALL\n");
                 r_rx_dispatch_fsm = RX_DISPATCH_GET_WOK;
             else
             {
+//printf("MAC address 4 for channel[0] = %x and MAC 4 by packet = %x\n",r_channel_mac_4[0].read(),r_rx_dispatch_data.read());
+//printf("MAC address 2 for channel[0] = %x and MAC 2 by packet = %x\n",r_channel_mac_2[0].read(),data_ext);
                 r_rx_dispatch_npkt_skip_adrmac_fail = r_rx_dispatch_npkt_skip_adrmac_fail.read() + 1;
+                printf("nb pkt addrmac fail = %d\n",r_rx_dispatch_npkt_skip_adrmac_fail.read());
                 r_rx_dispatch_fsm = RX_DISPATCH_PACKET_SKIP;
             }
             break;
@@ -1409,7 +1896,12 @@ printf("ENTERING RX_DISPATCH_GET_CLOSE\n");
     uint32_t             bp_fifo_multi_padding = 0;
     uint32_t             bp_fifo_multi_wdata   = 0;
     
-
+    //r_tx_dispatch_dt0 = r_tx_channel[r_tx_dispatch_channel.read()]->data();
+    //r_tx_dispatch_dt1 = r_tx_dispatch_dt0.read() ;
+    //r_tx_dispatch_dt2 = r_tx_dispatch_dt1.read() ;
+    //printf("dt0 = %x\n",r_tx_dispatch_dt0.read());
+    //printf("dt1 = %x\n",r_tx_dispatch_dt1.read());
+    //printf("dt2 = %x\n",r_tx_dispatch_dt2.read());
 
     switch( r_tx_dispatch_fsm.read() )
     {
@@ -1443,6 +1935,7 @@ printf("ENTERING RX_DISPATCH_GET_CLOSE\n");
             uint32_t channel      = r_tx_dispatch_channel.read();
             uint32_t plen         = r_tx_channel[channel]->plen();
             r_tx_dispatch_first_bytes_pckt = 1;
+            r_tx_dispatch_interne = 0;
             r_tx_dispatch_bytes   = plen & 0x3;
             if ( (plen & 0x3) == 0 ) r_tx_dispatch_words = plen >> 2;
             else                     r_tx_dispatch_words = (plen >> 2) + 1;
@@ -1478,13 +1971,17 @@ printf("TX_DISPATCH_GET_PLEN : %d %d %d\n",plen,r_tx_dispatch_bytes.get_new_valu
 printf("SKIP PACKET IN TX_DISPATCH !\n");
             break;
         }
-
-        case TX_DISPATCH_READ_FIRST: // read first word from tx_channel
+       
+ case TX_DISPATCH_READ_FIRST: // read first word from tx_channel
         {
             uint32_t channel    = r_tx_dispatch_channel.read();
             tx_channel_rcmd     = TX_CHANNEL_RCMD_READ;
-            r_tx_dispatch_data  = r_tx_channel[channel]->data();
+            //r_tx_dispatch_data  = r_tx_channel[channel]->data();
+            //r_tx_dispatch_mac_4_dest  = r_tx_channel[channel]->data();
+            //r_tx_dispatch_mac_4_dest  = dt0.read();
+            
             r_tx_dispatch_words = r_tx_dispatch_words.read() - 1;
+            
             r_tx_dispatch_fsm   = TX_DISPATCH_FIFO_SELECT;
 //printf("TX_DISPATCH_READ_FISRT : data is %x\n",r_tx_dispatch_data.get_new_value());
             break;
@@ -1493,20 +1990,80 @@ printf("SKIP PACKET IN TX_DISPATCH !\n");
         {
             // we read the second data word, without modifying the channel state
             uint32_t        channel  = r_tx_dispatch_channel.read();
-            unsigned int    data_ext = r_tx_channel[channel]->data() & 0x0000FFFF;  
-            bool            found    = false;
+            //uint32_t        data_tmp = r_tx_channel[channel]->data();
+            //uint32_t        data_mac_2_dest = data_tmp & 0x0000FFFF;
+            //uint32_t        data_mac_2_src  = (data_tmp & 0xFFFF0000)>>16;
+            uint32_t        data_mac_2_dest = r_tx_channel[channel]->data() & 0x0000FFFF;
+            uint32_t        data_mac_2_src  = (r_tx_channel[channel]->data() & 0xFFFF0000)>>16;
+            //unsigned int    data_ext = r_tx_channel[channel]->data() & 0x0000FFFF;  
+            uint32_t            found    = r_tx_dispatch_interne.read();
+            //printf("TX_DISPATCH_FIFO_SELECT : @MAC 4 = %x | @MAC 2 = %x \n",r_tx_dispatch_data.read(),data_ext );
 
-//printf("TX_DISPATCH_FIFO_SELECT : @MAC 4 = %x | @MAC 2 = %x \n",r_tx_dispatch_data.read(),data_ext );
+            tx_channel_rcmd = TX_CHANNEL_RCMD_READ;
+            r_tx_dispatch_words = r_tx_dispatch_words.read() - 1;
+            
+            //r_tx_dispatch_mac_2_dest = data_mac_2_dest;
+            //r_tx_dispatch_mac_2_src = data_mac_2_src;
 
-            for ( size_t k = 0 ; (k < m_channels) and not found ; k++ )
+            /*for ( size_t k = 0 ; (k < m_channels) and not found ; k++ )
             {
                 if ( (r_channel_mac_4[k].read() == r_tx_dispatch_data.read() ) and
                      (r_channel_mac_2[k].read() == data_ext) ) found = true;
             }
             if ( found )    r_tx_dispatch_fsm = TX_DISPATCH_READ_WRITE_BP;
             else            r_tx_dispatch_fsm = TX_DISPATCH_WRITE_B0_TX;
+            break;*/
+            for ( size_t k = 0 ; (k < m_channels) and (found == 0) ; k++ )
+            {
+//printf("addr mac 4 channel [%d] = %x and addr mac 4  = %x\n",k,r_channel_mac_4[k].read(),r_tx_dispatch_dt0.read());
+//printf("addr mac 2 channel [%d] = %x and addr mac 2  = %x\n",k,r_channel_mac_2[k].read(),data_mac_2_dest);
+                if ( (r_channel_mac_4[k].read() == r_tx_dispatch_dt0.read() ) and
+                     (r_channel_mac_2[k].read() == data_mac_2_dest) ) 
+                {
+                    printf("ENVOIE EN INTERNE\n");
+                    found = 1;
+                    r_tx_dispatch_interne = found;
+                }
+            }
+            r_tx_dispatch_fsm = TX_DISPATCH_CHECK_MAC_ADDR_SRC;
             break;
         }
+
+        case TX_DISPATCH_CHECK_MAC_ADDR_SRC :
+        {
+            uint32_t channel    = r_tx_dispatch_channel.read();
+            uint32_t data_mac_4_src = r_tx_channel[channel]->data();
+            tx_channel_rcmd     = TX_CHANNEL_RCMD_READ;
+            uint32_t tmp = ((((data_mac_4_src&0x0000FFFF)<<16)|(r_tx_dispatch_dt0.read()&0xFFFF0000)>>16)|((data_mac_4_src&0x0000FFFF)<<16));
+            r_tx_dispatch_data  = r_tx_dispatch_dt1.read();
+            //r_tx_dispatch_mac_4_src  = data_mac_4_src;
+            r_tx_dispatch_words = r_tx_dispatch_words.read() - 1;
+
+//printf("tx_channel data = %x\n", r_tx_channel[channel]->data());
+//printf("tmp = %x\n",tmp);
+//printf("dt0 = %x\n",r_tx_dispatch_dt0.read());
+//printf("dt1 = %x\n",r_tx_dispatch_dt1.read());
+//printf("dt2 = %x\n",r_tx_dispatch_dt2.read());
+//printf("addr mac 4 channel 0 = %x and addr mac 4 src = %x\n",r_channel_mac_4[channel].read(),tmp);
+//printf("addr mac 2 channel 0 = %x and addr mac 2 src = %x\n",r_channel_mac_2[channel].read(),(r_tx_channel[channel]->data()&0xFFFF0000)>>16);
+            if((r_channel_mac_4[channel].read() ==  (tmp)) 
+                    and (r_channel_mac_2[channel].read() == ((r_tx_channel[channel]->data()&0xFFFF0000)>>16)))
+            {
+                if(r_tx_dispatch_interne == 1)
+                    r_tx_dispatch_fsm = TX_DISPATCH_READ_WRITE_BP;
+                else
+                    r_tx_dispatch_fsm = TX_DISPATCH_WRITE_B0_TX;
+            } 
+
+            else
+            {
+                r_tx_dispatch_addr_mac_src_fail = r_tx_dispatch_addr_mac_src_fail.read() + 1;
+                printf("nb addr mac src fail = %d \n",r_tx_dispatch_addr_mac_src_fail.read());
+                r_tx_dispatch_fsm = TX_DISPATCH_SKIP_PKT;
+            }
+            break;
+        }
+
         case TX_DISPATCH_READ_WRITE_BP: // write previous data in bp_fifo
                                         // and read a new data from selected channel
         {
@@ -1519,16 +2076,19 @@ printf("SKIP PACKET IN TX_DISPATCH !\n");
             {     
                 bp_fifo_multi_wcmd    = FIFO_MULTI_WCMD_WRITE;
                 bp_fifo_multi_wdata   = r_tx_dispatch_data.read();
-                r_tx_dispatch_data    = r_tx_channel[channel]->data();
+                //bp_fifo_multi_wdata   = r_tx_dispatch_dt2.read();
+                //r_tx_dispatch_data    = r_tx_channel[channel]->data();
                 r_tx_dispatch_words   = words - 1;
                 if ( words == 1 )       // read last word
                 {
                     tx_channel_rcmd   = TX_CHANNEL_RCMD_LAST;
                     r_tx_dispatch_fsm = TX_DISPATCH_WRITE_LAST_BP;
+                    r_tx_dispatch_data = r_tx_dispatch_dt1.read();
                 }
                 else
                 {
                     tx_channel_rcmd   = TX_CHANNEL_RCMD_READ;
+                    r_tx_dispatch_data = r_tx_dispatch_dt1.read();
                 }
             }
             break;
@@ -1538,22 +2098,38 @@ printf("SKIP PACKET IN TX_DISPATCH !\n");
 printf("TX_DISPATCH_WRITE_LAST_BP\n");
             uint32_t  packets = r_tx_dispatch_packets.read();
             uint32_t  bytes   = r_tx_dispatch_bytes.read();
+            uint32_t  pipe_count = r_tx_dispatch_pipe_count.read();
 
             if ( r_bp_fifo_multi.wok() )
             {
-                bp_fifo_multi_wcmd    = FIFO_MULTI_WCMD_LAST;
-                bp_fifo_multi_wdata   = r_tx_dispatch_data.read();
-                if ( bytes == 0 )
-                    bp_fifo_multi_padding = 0;
+                if(pipe_count == 0)
+                {
+                    bp_fifo_multi_wcmd    = FIFO_MULTI_WCMD_LAST;
+                    bp_fifo_multi_wdata   = r_tx_dispatch_data.read();
+                    //bp_fifo_multi_wdata   = r_tx_dispatch_dt2.read();
+                    if ( bytes == 0 )
+                        bp_fifo_multi_padding = 0;
+                    else
+                        bp_fifo_multi_padding = 4 - bytes;
+                    r_tx_dispatch_packets = packets - 1;
+                    r_tx_npkt = r_tx_npkt.read() + 1;
+                    r_tx_dispatch_pipe_count = 2;
+                    if ( packets == 1 )
+                        r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT; 
+                    else
+                        r_tx_dispatch_fsm = TX_DISPATCH_GET_PLEN; 
+                }
                 else
-                    bp_fifo_multi_padding = 4 - bytes;
-                r_tx_dispatch_packets = packets - 1;
-                r_tx_npkt = r_tx_npkt.read() + 1;
+                {
+                    bp_fifo_multi_wcmd = FIFO_MULTI_WCMD_WRITE;
+                    bp_fifo_multi_wdata = r_tx_dispatch_data.read();
+                    if(pipe_count == 2)
+                        r_tx_dispatch_data = r_tx_dispatch_dt1.read();
+                    if(pipe_count == 1)
+                        r_tx_dispatch_data = r_tx_dispatch_dt0.read();
+                    r_tx_dispatch_pipe_count = r_tx_dispatch_pipe_count.read() - 1;
+                }
 
-                if ( packets == 1 )
-                    r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT; 
-                else
-                    r_tx_dispatch_fsm = TX_DISPATCH_GET_PLEN; 
             }
             break;
         }
@@ -1562,30 +2138,31 @@ printf("TX_DISPATCH_WRITE_LAST_BP\n");
             uint32_t words   = r_tx_dispatch_words.read();
             uint32_t bytes   = r_tx_dispatch_bytes.read();
             uint32_t packets = r_tx_dispatch_packets.read();
+            uint32_t pipe_count = r_tx_dispatch_pipe_count.read();
 
 
             if ( r_tx_fifo_stream.wok() )
             {
-/*printf("channel = %x\n",channel);
-printf("words = %x\n",words);
-printf("bytes = %x\n",bytes);
-printf("packets = %x\n",packets);
-printf("max_words = %x\n",max_words);*/
                 tx_fifo_stream_write = true;
 //                tx_fifo_stream_wdata = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_SOS<<8);
                 if ( (r_tx_dispatch_first_bytes_pckt.read() == 1))
                 {
-printf("SOS\n");
+//printf("SOS\n");
                     tx_fifo_stream_wdata = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_SOS<<8);
+                    //tx_fifo_stream_wdata = (r_tx_dispatch_dt2.read() & 0x000000FF) | (STREAM_TYPE_SOS<<8);
+printf("dt2 in B0 = %x\n",r_tx_dispatch_data.read());
                     r_tx_dispatch_first_bytes_pckt = 0;
                 }
                 else
                 {
                     tx_fifo_stream_wdata = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_NEV<<8);
+                    //tx_fifo_stream_wdata = (r_tx_dispatch_dt2.read() & 0x000000FF) | (STREAM_TYPE_NEV<<8);
+printf("dt2 in B0 = %x\n",r_tx_dispatch_data.read());
                 }
-                if ( (words == 0) and (bytes == 1) )   // last byte to write in tx_fifo
+                if ( (words == 0) and (bytes == 1) and (pipe_count == 0) )   // last byte to write in tx_fifo
                 {
                     tx_fifo_stream_wdata         = (r_tx_dispatch_data.read() & 0x000000FF) | (STREAM_TYPE_EOS <<8);
+                    //tx_fifo_stream_wdata         = (r_tx_dispatch_dt2.read() & 0x000000FF) | (STREAM_TYPE_EOS <<8);
                     r_tx_dispatch_packets = packets - 1;
                     r_tx_npkt = r_tx_npkt.read() + 1;
                     if ( packets == 1 ) r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
@@ -1604,14 +2181,18 @@ printf("SOS\n");
             uint32_t    words = r_tx_dispatch_words.read();
             uint32_t    bytes = r_tx_dispatch_bytes.read(); 
             uint32_t packets = r_tx_dispatch_packets.read();
+            uint32_t pipe_count = r_tx_dispatch_pipe_count.read();
 
             if ( r_tx_fifo_stream.wok() )
             {
                 tx_fifo_stream_write = true;
                 tx_fifo_stream_wdata = ((r_tx_dispatch_data.read() >> 8) & 0x000000FF) | (STREAM_TYPE_NEV<<8);
-                if ( (words == 0) and (bytes == 2) )   // last byte to write in tx_fifo
+                //tx_fifo_stream_wdata = ((r_tx_dispatch_dt2.read() >> 8) & 0x000000FF) | (STREAM_TYPE_NEV<<8);
+printf("dt2 in B1= %x\n",r_tx_dispatch_data.read());
+                if ( (words == 0) and (bytes == 2) and(pipe_count == 0))   // last byte to write in tx_fifo
                 {
                     tx_fifo_stream_wdata         = ((r_tx_dispatch_data.read()>>8) & 0x000000FF) | (STREAM_TYPE_EOS <<8);
+                    //tx_fifo_stream_wdata         = ((r_tx_dispatch_dt2.read()>>8) & 0x000000FF) | (STREAM_TYPE_EOS <<8);
                     r_tx_dispatch_packets = packets - 1;
                     r_tx_npkt = r_tx_npkt.read() + 1;
                     if ( packets == 1 ) r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
@@ -1630,14 +2211,18 @@ printf("SOS\n");
             uint32_t    words = r_tx_dispatch_words.read();
             uint32_t    bytes = r_tx_dispatch_bytes.read(); 
             uint32_t packets = r_tx_dispatch_packets.read();
+            uint32_t pipe_count = r_tx_dispatch_pipe_count.read();
 
             if ( r_tx_fifo_stream.wok() )
             {
                 tx_fifo_stream_write = true;
                 tx_fifo_stream_wdata = ((r_tx_dispatch_data.read() >> 16) & 0x000000FF) | (STREAM_TYPE_NEV<<8);
-                if ( (words == 0) and (bytes == 3) )   // last byte to write in tx_fifo
+                //tx_fifo_stream_wdata = ((r_tx_dispatch_dt2.read() >> 16) & 0x000000FF) | (STREAM_TYPE_NEV<<8);
+printf("dt2 in B2= %x\n",r_tx_dispatch_data.read());
+                if ( (words == 0) and (bytes == 3) and(pipe_count==0))   // last byte to write in tx_fifo
                 {
                     tx_fifo_stream_wdata         = ((r_tx_dispatch_data.read()>>16) & 0x000000FF) | (STREAM_TYPE_EOS <<8);
+                    //tx_fifo_stream_wdata         = ((r_tx_dispatch_dt2.read()>>16) & 0x000000FF) | (STREAM_TYPE_EOS <<8);
                     r_tx_dispatch_packets = packets - 1;
                     r_tx_npkt = r_tx_npkt.read() + 1;
                     if ( packets == 1 ) r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
@@ -1658,30 +2243,49 @@ printf("SOS\n");
             uint32_t channel = r_tx_dispatch_channel.read();
             uint32_t words   = r_tx_dispatch_words.read();
             uint32_t packets = r_tx_dispatch_packets.read();
+            uint32_t pipe_count = r_tx_dispatch_pipe_count.read();
 
             if ( r_tx_fifo_stream.wok() )
             {
                 tx_fifo_stream_write = true;
                 tx_fifo_stream_wdata = ((r_tx_dispatch_data.read() >> 24) & 0x000000FF) | (STREAM_TYPE_NEV<<8);
+                //tx_fifo_stream_wdata = ((r_tx_dispatch_dt2.read() >> 24) & 0x000000FF) | (STREAM_TYPE_NEV<<8);
+printf("dt2 in R/W= %x\n",r_tx_dispatch_data.read());
                 if ( words == 0 )       // last byte to write in tx_fifo
                 {
-                    tx_fifo_stream_wdata         = ((r_tx_dispatch_data.read()>>24) & 0x000000FF) | (STREAM_TYPE_EOS <<8);
-                    r_tx_dispatch_packets = packets - 1;
-                    r_tx_npkt = r_tx_npkt.read() + 1;
-                    if ( packets == 1 ) r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
-                    else                r_tx_dispatch_fsm = TX_DISPATCH_GET_PLEN;
+                    //tx_fifo_stream_wdata         = ((r_tx_dispatch_data.read()>>24) & 0x000000FF) | (STREAM_TYPE_EOS <<8);
+                    if(pipe_count == 0)
+                    {
+                        tx_fifo_stream_wdata         = ((r_tx_dispatch_data.read()>>24) & 0x000000FF) | (STREAM_TYPE_EOS <<8);
+                        //tx_fifo_stream_wdata         = ((r_tx_dispatch_dt2.read()>>24) & 0x000000FF) | (STREAM_TYPE_EOS <<8);
+                        r_tx_dispatch_packets = packets - 1;
+                        r_tx_npkt = r_tx_npkt.read() + 1;
+                        r_tx_dispatch_pipe_count = 2;
+                        if ( packets == 1 ) r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
+                        else                r_tx_dispatch_fsm = TX_DISPATCH_GET_PLEN;
+                    }
+                    else
+                    {
+                        if(pipe_count == 2)
+                            r_tx_dispatch_data = r_tx_dispatch_dt1.read();
+                        else if(pipe_count == 1)
+                            r_tx_dispatch_data = r_tx_dispatch_dt0.read();
+                        r_tx_dispatch_pipe_count = r_tx_dispatch_pipe_count.read() - 1;
+                        r_tx_dispatch_fsm = TX_DISPATCH_WRITE_B0_TX;
+
+                    }
                 }
                 else if ( words == 1 )  // last word to read in tx_channel
                 {
                     tx_channel_rcmd     = TX_CHANNEL_RCMD_LAST;
-                    r_tx_dispatch_data  = r_tx_channel[channel]->data();
+                    r_tx_dispatch_data  = r_tx_dispatch_dt1.read();
                     r_tx_dispatch_words = words - 1;
                     r_tx_dispatch_fsm   = TX_DISPATCH_WRITE_B0_TX;
                 }
                 else if ( words > 1 )   // not the last word to read in tx_channel
                 {
                     tx_channel_rcmd     = TX_CHANNEL_RCMD_READ;
-                    r_tx_dispatch_data  = r_tx_channel[channel]->data();
+                    r_tx_dispatch_data  = r_tx_dispatch_dt1.read();
                     r_tx_dispatch_words = words - 1;
                     r_tx_dispatch_fsm   = TX_DISPATCH_WRITE_B0_TX;
                 }
@@ -1691,13 +2295,18 @@ printf("SOS\n");
         }
         case TX_DISPATCH_RELEASE_CONT: // release the container in tx_channel
         {
-printf("TX_DISPATCH_RELEASE_CONT\n");
+//printf("TX_DISPATCH_RELEASE_CONT\n");
             tx_channel_rcmd   = TX_CHANNEL_RCMD_RELEASE;
             r_tx_dispatch_fsm = TX_DISPATCH_IDLE;
             break;
         }
     } // end switch tx_dispatch_fsm   
-    
+    if(tx_channel_rcmd == TX_CHANNEL_RCMD_READ or tx_channel_rcmd == TX_CHANNEL_RCMD_LAST)
+    {
+        r_tx_dispatch_dt0 = r_tx_channel[r_tx_dispatch_channel.read()]->data();
+        r_tx_dispatch_dt1 = r_tx_dispatch_dt0.read() ;
+        r_tx_dispatch_dt2 = r_tx_dispatch_dt1.read() ;
+    }
     ////////////////////////////////////////////////////////////////////////////
     // This TX_S2G FSM performs the STREAM to GMII format conversion,
     // computes the checksum, and append this checksum to the packet.
@@ -1761,7 +2370,7 @@ printf("TX_DISPATCH_RELEASE_CONT\n");
 
                 if ( type == STREAM_TYPE_EOS ) 
                 {
-printf("EOS GO WRITE_LAST !!!!\n");
+//printf("EOS GO WRITE_LAST !!!!\n");
                     //r_tx_s2g_fsm = TX_S2G_WRITE_CS; 
                     r_tx_s2g_fsm = TX_S2G_WRITE_LAST_DATA; 
                     //r_gmii_tx.put(true,false,r_tx_s2g_data.get_new_value());
@@ -1909,7 +2518,7 @@ printf("EOS GO WRITE_LAST !!!!\n");
         printf("valeur de r_rx_g2s_npkt_crc_fail : %d\n",r_rx_g2s_npkt_crc_fail.read());
         printf("valeur de r_rx_g2s_npkt_err : %d\n",r_rx_g2s_npkt_err.read());
         printf("valeur de r_rx_des_npkt_err_in_des : %d\n",r_rx_des_npkt_err_in_des.read());
-        printf("valeur de r_rx_des_npkt_err_mfifo_full : %d\n",r_rx_des_npkt_drop_mfifo_full.read());
+        printf("valeur de r_rx_des_npkt_err_mfifo_full : %d\n",r_rx_des_npkt_err_mfifo_full.read());
         printf("valeur de r_rx_des_npkt_overflow : %d\n",r_rx_des_npkt_overflow.read());
         printf("valeur de r_rx_des_npkt_small : %d\n",r_rx_des_npkt_small.read());
         printf("valeur de r_rx_des_npkt_write_mfifo_success : %d\n",r_rx_des_npkt_write_mfifo_success.read());
@@ -1971,6 +2580,24 @@ tmpl(void)::genMoore()
             else                     p_vci.reop = false;
             break;
         }
+
+        case VCI_READ_REG:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            //p_vci.rdata  = sel_register.read();
+            p_vci.rdata  = set_sel_register((uint32_t)p_vci.address.read());
+//printf("sel_register in VCI_GENMOORE = %d\n",sel_register.read());
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+
+
+        /*
         case VCI_READ_RX_ROK:
         {
             p_vci.cmdack = false;
@@ -1983,6 +2610,187 @@ tmpl(void)::genMoore()
             p_vci.reop   = true;
             break;
         }
+        case VCI_READ_RX_PKT:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_g2s_npkt.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_CRC_SUCCESS:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_g2s_npkt_crc_success.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_CRC_FAIL:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_g2s_npkt_crc_fail.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_ERR_MII:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_g2s_npkt_err.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_MFIFO_SUCCESS:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_des_npkt_write_mfifo_success.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_ERR_SMALL:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_des_npkt_small.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_ERR_OVERFLOW:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_des_npkt_overflow.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_ERR_MFIFO_FULL:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_des_npkt_err_mfifo_full.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_ERR_IN_DES:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_des_npkt_err_in_des.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_CHANNEL_SUCCESS:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_dispatch_npkt_wchannel_success.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_CHANNEL_FAIL:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_dispatch_npkt_wchannel_fail.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_RX_MAC_ADDR_FAIL:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_rx_dispatch_npkt_skip_adrmac_fail.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_TX_PKT:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_tx_npkt.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_TX_ERR_SMALL:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_tx_npkt_small.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+        case VCI_READ_TX_ERR_OVERFLOW:
+        {
+            p_vci.cmdack = false;
+            p_vci.rspval = true;
+            p_vci.rdata  = r_tx_npkt_overflow.read();
+            p_vci.rerror = vci_param::ERR_NORMAL;
+            p_vci.rsrcid = r_vci_srcid.read();
+            p_vci.rtrdid = r_vci_trdid.read();
+            p_vci.rpktid = r_vci_pktid.read();
+            p_vci.reop   = true;
+            break;
+        }
+
         case VCI_READ_TX_WOK:
         {
             p_vci.cmdack = false;
@@ -1996,6 +2804,7 @@ tmpl(void)::genMoore()
             p_vci.reop   = true;
             break;
         }
+        */
     } // end switch vci_fsm
 
 } // end genMore()
@@ -2006,11 +2815,27 @@ tmpl(void)::print_trace()
     const char* vci_state_str[] = 
     {
         "VCI_IDLE",
-        "VCI_READ_TX_WOK",
+        //"VCI_READ_TX_WOK",
         "VCI_WRITE_TX_BURST",
         "VCI_WRITE_TX_LAST",
         "VCI_WRITE_TX_CLOSE",
-        "VCI_READ_RX_ROK",
+        "VCI_READ_REG",
+        /*"VCI_READ_RX_ROK",
+        "VCI_READ_RX_PKT",
+        "VCI_READ_RX_CRC_SUCCESS",
+        "VCI_READ_RX_CRC_FAIL",
+        "VCI_READ_RX_ERR_MII",
+        "VCI_READ_RX_MFIFO_SUCCESS",
+        "VCI_READ_RX_ERR_SMALL",
+        "VCI_READ_RX_ERR_OVERFLOW",
+        "VCI_READ_RX_ERR_MFIFO_FULL",
+        "VCI_READ_RX_ERR_IN_DES",
+        "VCI_READ_RX_CHANNEL_SUCCESS",
+        "VCI_READ_RX_CHANNEL_FAIL",
+        "VCI_READ_RX_MAC_ADDR_FAIL",
+        "VCI_READ_TX_PKT",
+        "VCI_READ_TX_ERR_SMALL",
+        "VCI_READ_TX_ERR_OVERFLOW",*/
         "VCI_READ_RX_BURST",
         "VCI_WRITE_RX_RELEASE",
         "VCI_WRITE_MAC_4",
@@ -2062,6 +2887,7 @@ tmpl(void)::print_trace()
         "TX_DISPATCH_SKIP_PKT", 
         "TX_DISPATCH_READ_FIRST",
         "TX_DISPATCH_FIFO_SELECT",
+        "TX_DISPATCH_CHECK_ADDR_MAC_SRC",
         "TX_DISPATCH_READ_WRITE_BP",
         "TX_DISPATCH_WRITE_LAST_BP",
         "TX_DISPATCH_WRITE_B0_TX",
@@ -2096,6 +2922,8 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
                          const char*                            tx_file_pathname, 
                          const size_t 				            timeout )
 	    : caba::BaseModule(name),
+           
+         // sel_register("sel_register"),
 
           r_vci_fsm("r_vci_fsm"),
           r_vci_srcid("r_vci_srcid"),
@@ -2153,7 +2981,12 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
           r_tx_npkt("r_tx_npkt"),
           r_tx_npkt_overflow("r_tx_npkt_overflow"),
           r_tx_npkt_small("r_tx_npkt_small"),
-
+          r_tx_dispatch_addr_mac_src_fail("r_tx_dispatch_addr_mac_src_fail"),
+          r_tx_dispatch_dt0("r_tx_dispatch_dt0"),
+          r_tx_dispatch_dt1("r_tx_dispatch_dt1"),
+          r_tx_dispatch_dt2("r_tx_dispatch_dt2"),
+          r_tx_dispatch_interne("r_tx_dispatch_interne"),
+          r_tx_dispatch_pipe_count("r_tx_dispatch_pipe_count"),
           r_tx_s2g_fsm("r_tx_s2g_fsm"),
           r_tx_s2g_checksum("r_tx_s2g_checksum"),
           r_tx_s2g_data("r_tx_s2g_data"),
@@ -2185,8 +3018,8 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
     r_rx_channel = new NicRxChannel*[channels];
     r_tx_channel = new NicTxChannel*[channels];
 
-    r_channel_mac_4 = new sc_signal<uint32_t>*[channels];
-    r_channel_mac_2 = new sc_signal<uint32_t>*[channels];
+    r_channel_mac_4 = new sc_signal<uint32_t>[channels];
+    r_channel_mac_2 = new sc_signal<uint32_t>[channels];
 
     for ( size_t k=0 ; k<channels ; k++)
     {

@@ -59,6 +59,7 @@ class VciMultiNic
     // methods
     void transition();
     void genMoore();
+    uint32_t set_sel_register(uint32_t addr); 
 
     // Global CONFIGURATION and STATUS registers
 
@@ -69,7 +70,7 @@ class VciMultiNic
     sc_signal<uint32_t>                     r_channel_mac_addr_set;             // bitfield where bit N means : 0 -> channel N has NO MAC addr, 1 -> channel N has a MAC addr set
     sc_signal<uint32_t>                     *r_channel_;                   // MAC address extend
 
-
+//    sc_signal<uint32_t>                     sel_register;
     // VCI registers
     sc_signal<int>				            r_vci_fsm;
     sc_signal<typename vci_param::srcid_t>	r_vci_srcid;            // for rsrcid
@@ -131,6 +132,12 @@ class VciMultiNic
     sc_signal<uint32_t>                     r_tx_npkt;              // packet send (stat counter)
     sc_signal<uint32_t>                     r_tx_npkt_overflow;     // packet skip because of overflow length >1518B(stat counter)
     sc_signal<uint32_t>                     r_tx_npkt_small;              // packet skip because of too small length <64B (stat counter)
+    sc_signal<uint32_t>                     r_tx_dispatch_addr_mac_src_fail;
+    sc_signal<uint32_t>                     r_tx_dispatch_dt0;
+    sc_signal<uint32_t>                     r_tx_dispatch_dt1;
+    sc_signal<uint32_t>                     r_tx_dispatch_dt2;
+    sc_signal<uint32_t>                     r_tx_dispatch_interne;
+    sc_signal<uint32_t>                     r_tx_dispatch_pipe_count;
 
     // TX_S2G registers
     sc_signal<int>                          r_tx_s2g_fsm;
@@ -165,11 +172,27 @@ public:
     // FSM states
     enum vci_tgt_fsm_state_e {
         VCI_IDLE,
-        VCI_READ_TX_WOK,
+        //VCI_READ_TX_WOK,
         VCI_WRITE_TX_BURST,
         VCI_WRITE_TX_LAST,
         VCI_WRITE_TX_CLOSE,
-        VCI_READ_RX_ROK,
+        VCI_READ_REG,
+        /*VCI_READ_RX_ROK,
+        VCI_READ_RX_PKT,
+        VCI_READ_RX_CRC_SUCCESS,
+        VCI_READ_RX_CRC_FAIL,
+        VCI_READ_RX_ERR_MII,
+        VCI_READ_RX_MFIFO_SUCCESS,
+        VCI_READ_RX_ERR_SMALL,
+        VCI_READ_RX_ERR_OVERFLOW,
+        VCI_READ_RX_ERR_MFIFO_FULL,
+        VCI_READ_RX_ERR_IN_DES,
+        VCI_READ_RX_CHANNEL_SUCCESS,
+        VCI_READ_RX_CHANNEL_FAIL,
+        VCI_READ_RX_MAC_ADDR_FAIL,
+        VCI_READ_TX_PKT,
+        VCI_READ_TX_ERR_SMALL,
+        VCI_READ_TX_ERR_OVERFLOW,*/
         VCI_READ_RX_BURST,
         VCI_WRITE_RX_RELEASE,
         VCI_WRITE_MAC_4,
@@ -217,6 +240,7 @@ public:
         TX_DISPATCH_SKIP_PKT, 
         TX_DISPATCH_READ_FIRST,
         TX_DISPATCH_FIFO_SELECT,
+        TX_DISPATCH_CHECK_MAC_ADDR_SRC,
         TX_DISPATCH_READ_WRITE_BP,
         TX_DISPATCH_WRITE_LAST_BP,
         TX_DISPATCH_WRITE_B0_TX,
