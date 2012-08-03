@@ -61,6 +61,7 @@ enum SoclibMultiNicGlobalRegisters {
     // CONTROLER MANAGEMENT
     GENERAL_MAC_4,
     GENERAL_MAC_2,
+    NIC_ON,
 };
 
 /*enum SoclibMultiNicChannelsRegisters {

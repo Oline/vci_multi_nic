@@ -141,9 +141,12 @@ public:
     // It is therefore written as a transition and contains a 
     // two states FSM to introduce the inter-packet waiting cycles.
     ///////////////////////////////////////////////////////////////////
-    void get( bool*     dv,          // data valid
-              bool*     er,          // data error
-              uint8_t*  dt )         // data value
+    void get( bool*     dv,         // data valid
+              bool*     er,         // data error
+              uint8_t*  dt,         // data value
+              bool      on)         // power enable
+    {
+    if(on == 1)
     {
         if ( r_fsm_gap )    // inter-packet state
             {
@@ -176,6 +179,13 @@ public:
         // printf("valeur de dt : %x\n",*dt);
         // printf("valeur de dv : %x\n",*dv);
         // printf("valeur de er : %x\n",*er);
+    }
+    else
+    {
+        *dv = false;
+        *er = false;
+        *dt = 0;
+    }
     } // end get()
                 
     //////////////////////////////////////////////////////////////

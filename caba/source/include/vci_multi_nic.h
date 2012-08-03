@@ -59,18 +59,21 @@ class VciMultiNic
     // methods
     void transition();
     void genMoore();
-    uint32_t set_sel_register(uint32_t addr); 
+    uint32_t read_register(uint32_t addr); 
 
     // Global CONFIGURATION and STATUS registers
 
     // Channel CONFIGURATION and STATUS registers
+    sc_signal<bool>                         r_nic_on;                           // register power enable
     sc_signal<uint32_t>                     *r_channel_mac_4;                   // MAC address (first 4 bytes)
     sc_signal<uint32_t>                     *r_channel_mac_2;                   // MAC address (last 2 bytes)
     sc_signal<uint32_t>                     r_channel_active_channels;          // bitfield where bit N means : 0 -> channel N is disabled, 1 -> channel N is enabled
     sc_signal<uint32_t>                     r_channel_mac_addr_set;             // bitfield where bit N means : 0 -> channel N has NO MAC addr, 1 -> channel N has a MAC addr set
     sc_signal<uint32_t>                     *r_channel_;                   // MAC address extend
-
-//    sc_signal<uint32_t>                     sel_register;
+    sc_signal<bool>                         r_rx_dispatch_broadcast;            // register set at 1 when broadcast detected
+    sc_signal<uint32_t>                     r_rx_sel_channel_wok;               // bitfield where bit N means : 0 -> channel N is not WOK, 1 -> channel N is WOK
+    sc_signal<uint32_t>                     r_rx_sel_space_timeout_ok;          // bitfield where bit N means : 0 -> channel N has not enough space or time for write, 1 -> channel N is good for write
+    
     // VCI registers
     sc_signal<int>				            r_vci_fsm;
     sc_signal<typename vci_param::srcid_t>	r_vci_srcid;            // for rsrcid
@@ -174,8 +177,10 @@ public:
         VCI_IDLE,
         //VCI_READ_TX_WOK,
         VCI_WRITE_TX_BURST,
+        VCI_READ_RX_BURST,
         VCI_WRITE_TX_LAST,
-        VCI_WRITE_TX_CLOSE,
+        //VCI_WRITE_TX_CLOSE,
+        VCI_WRITE_REG,
         VCI_READ_REG,
         /*VCI_READ_RX_ROK,
         VCI_READ_RX_PKT,
@@ -192,11 +197,10 @@ public:
         VCI_READ_RX_MAC_ADDR_FAIL,
         VCI_READ_TX_PKT,
         VCI_READ_TX_ERR_SMALL,
-        VCI_READ_TX_ERR_OVERFLOW,*/
-        VCI_READ_RX_BURST,
+        VCI_READ_TX_ERR_OVERFLOW,
         VCI_WRITE_RX_RELEASE,
         VCI_WRITE_MAC_4,
-        VCI_WRITE_MAC_2,
+        VCI_WRITE_MAC_2,*/
     };
     enum rx_g2s_fsm_state_e {
         RX_G2S_IDLE,
@@ -228,6 +232,8 @@ public:
         RX_DISPATCH_CHANNEL_SELECT,
         RX_DISPATCH_PACKET_SKIP,
         RX_DISPATCH_GET_WOK,
+        RX_DISPATCH_GET_WOK_BROADCAST,
+        RX_DISPATCH_GET_SPACE_BROADCAST,
         RX_DISPATCH_CLOSE_CONT,
         RX_DISPATCH_GET_SPACE,
         RX_DISPATCH_READ_WRITE,
