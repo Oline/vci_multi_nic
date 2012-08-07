@@ -22,6 +22,7 @@
  *
  * Copyright (c) UPMC, Lip6
  *         Alain Greiner <alain.greiner@lip6.fr> July 2008
+ *         Clement Devigne <clement.devigne@etu.upmc.fr>
  *
  * Maintainers: alain 
  */
@@ -158,9 +159,6 @@ public:
             r_ptw_word = 0;
             r_ptw_cont = (r_ptw_cont + 1) % 2;
             r_sts      = r_sts + 1;
-printf("TX_CLOSE in tx_channel\n");
-printf("r_ptw_cont = %d\n",r_ptw_cont);
-printf("r_sts = %d\n",r_sts);
         }
 
         // RCMD register update (depends only on cmd_r)
@@ -218,14 +216,12 @@ printf("TX_channel RELEASE\n");
             uint32_t words;
             if ( (plen_tmp & 0x3) == 0 ) words = plen_tmp >> 2;
             else                         words = (plen_tmp >> 2) + 1;
-            //printf("plen = %d and ptr_word = %d\n", words,r_ptr_word);
 
             r_ptr_word = r_ptr_first + words ;
             r_pkt_index = r_pkt_index + 1;
             r_ptr_first              = r_ptr_word;
 
         }
-        //printf("r_cont[%d][%d] = %x\n",k,r_ptw_word,r_cont[k][r_ptw_word]);
     } // end update()
 
     /////////////////////////////////////////////////////////////
@@ -245,9 +241,6 @@ printf("TX_channel RELEASE\n");
     { 
         bool        odd     = (r_pkt_index & 0x1);
         uint32_t    word    = (r_pkt_index / 2) + 1;
-//        printf("test du plen : odd = %d | r_pkt_index = %d | word = %d \n",odd,r_pkt_index,word);
-//        printf("test du plen :r_cont[0][1]= %x\n",r_cont[0][1]);
-//        printf("test du plen :r_cont[0][2]= %x\n",r_cont[0][2]);
         if ( odd ) return (r_cont[r_ptr_cont][word] >> 16);
         else       return (r_cont[r_ptr_cont][word] & 0x0000FFFF);
     }

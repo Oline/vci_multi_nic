@@ -62,15 +62,16 @@ class VciMultiNic
     uint32_t read_register(uint32_t addr); 
 
     // Global CONFIGURATION and STATUS registers
+    sc_signal<bool>                         r_broadcast_enable;                 // register broadcast mode enable when 1
+    sc_signal<bool>                         r_nic_on;                           // register power enable when 1
+    sc_signal<bool>                         r_rx_dispatch_broadcast;            // register set at 1 when broadcast detected
 
     // Channel CONFIGURATION and STATUS registers
-    sc_signal<bool>                         r_nic_on;                           // register power enable
     sc_signal<uint32_t>                     *r_channel_mac_4;                   // MAC address (first 4 bytes)
     sc_signal<uint32_t>                     *r_channel_mac_2;                   // MAC address (last 2 bytes)
     sc_signal<uint32_t>                     r_channel_active_channels;          // bitfield where bit N means : 0 -> channel N is disabled, 1 -> channel N is enabled
     sc_signal<uint32_t>                     r_channel_mac_addr_set;             // bitfield where bit N means : 0 -> channel N has NO MAC addr, 1 -> channel N has a MAC addr set
     sc_signal<uint32_t>                     *r_channel_;                   // MAC address extend
-    sc_signal<bool>                         r_rx_dispatch_broadcast;            // register set at 1 when broadcast detected
     sc_signal<uint32_t>                     r_rx_sel_channel_wok;               // bitfield where bit N means : 0 -> channel N is not WOK, 1 -> channel N is WOK
     sc_signal<uint32_t>                     r_rx_sel_space_timeout_ok;          // bitfield where bit N means : 0 -> channel N has not enough space or time for write, 1 -> channel N is good for write
     
@@ -141,6 +142,7 @@ class VciMultiNic
     sc_signal<uint32_t>                     r_tx_dispatch_dt2;
     sc_signal<uint32_t>                     r_tx_dispatch_interne;
     sc_signal<uint32_t>                     r_tx_dispatch_pipe_count;
+    sc_signal<bool>                         r_tx_dispatch_broadcast;
 
     // TX_S2G registers
     sc_signal<int>                          r_tx_s2g_fsm;

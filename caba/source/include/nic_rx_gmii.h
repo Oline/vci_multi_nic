@@ -112,7 +112,6 @@ class NicRxGmii
                         //printf("REMISE A ZERO DU FICHIER\n");
                         m_file >> r_plen >> string;
                     }
-                //std::cout << std::hex << string << std::endl;
                 for(cpt = 0; cpt < (r_plen << 1) ; cpt++)
                     {
                         string[cpt] = atox(string[cpt]);
@@ -176,9 +175,6 @@ public:
                         r_fsm_gap   = true;
                     }
             }
-        // printf("valeur de dt : %x\n",*dt);
-        // printf("valeur de dv : %x\n",*dv);
-        // printf("valeur de er : %x\n",*er);
     }
     else
     {

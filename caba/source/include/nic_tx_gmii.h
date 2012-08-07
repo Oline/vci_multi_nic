@@ -22,6 +22,7 @@
  *
  * Copyright (c) UPMC, Lip6
  *         Alain Greiner <alain.greiner@lip6.fr> July 2008
+ *         Clement Devigne <clement.devigne@etu.upmc.fr>
  *
  * Maintainers: alain 
  */
@@ -78,17 +79,15 @@ class NicTxGmii
         //assert( false and "function write_paket of GMII_TX not defined");
         if (m_file)
         {
-            //printf("m_file exist\n");
             uint32_t cpt = 0;
-            // ecrire dans le fichier (debut de ligne) la valeur de r_counter et un caractere d'espacement
+            // ecrit dans le fichier (debut de ligne) la valeur de r_counter et un caractere d'espacement
             m_file << (unsigned)r_counter << ' ';
             for (cpt = 0; cpt < (r_counter) ; cpt ++) // peut etre (r_counter << 1)
             {
-                //printf("data = %x\n",r_buffer[cpt]);
-                //ecrire simplement dans le fichier r_buffer[cpt]
+                //ecrit dans le fichier r_buffer[cpt]
                 m_file << std::hex << (unsigned)r_buffer[cpt] << " ";
             }
-            // quand le packet est ecrit en entier ecrire un retour a la ligne dans le fichier
+            // quand le packet est ecrit en entier ecrit un retour a la ligne dans le fichier
             m_file << std::dec << std::endl;
         }
     }
@@ -111,14 +110,12 @@ public:
     {
         if ( not dv and (r_counter != 0) )    // end of packet
         {
-            //printf("let's go write one packet\n");
             write_one_packet();
             r_counter = 0;
         }
         else if ( dv )    // running packet
         {
             r_buffer[r_counter] = dt;
-            //printf("r_buffer[%d] in tx_gmii is %x\n",r_counter,r_buffer[r_counter]);
             r_counter           = r_counter + 1;
         }
     } // end put()
@@ -129,7 +126,6 @@ public:
     NicTxGmii( const std::string  &name,
                const std::string  &path )
     : m_name(name),
-      //m_file(path.c_str(),std::ios::out | std::ios::trunc)
       m_file(path.c_str(),std::ios::out)
     {
         r_buffer        = new uint8_t[2048];

@@ -163,10 +163,8 @@ public:
                 if ( r_sts < 2 )    // at least one empty container
                     {
                         r_cont[container_index][r_ptw_word]    = wdata;
-                        //printf("VALEUR de data  : %x\n",r_cont[container_index][r_ptw_word]);
                         r_ptw_word               = r_ptw_word + 1;
                         r_pkt_length             = r_pkt_length + 4;
-                        //printf("WRITING CHANNEL %d RX timer = %d\n",container_index,r_timer);
                     }
                 else
                     {
@@ -189,10 +187,6 @@ public:
                         bool        odd          = (r_pkt_index & 0x1);
                         uint32_t    word         = (r_pkt_index >> 1) + 1;
 
-                        // timer reset if last word
-                        // r_timer                  = m_timeout;
-                        //printf("CONTAINER ecrit %d\n",container_index);
-                        //printf("WRITING LAST CHANNEL %d RX timer = %d and plen =%d\n",container_index,r_timer,plen);
                         r_cont[container_index][r_ptw_word]    = wdata;
                         r_ptw_word               = r_ptw_word + 1;
                         if (odd) r_cont[container_index][word] = (r_cont[container_index][word] & 0x0000FFFF) | plen<<16;
@@ -247,7 +241,6 @@ public:
                 //printf("READING CHANNEL RX timer = %d\n",r_timer);
                 assert( (r_ptr_word < NIC_CONTAINER_SIZE) and
                         "ERROR in NIC_RX_CHANNEL : read pointer overflow" );
-                //printf("le container lu est %d\n",container_index);
                 if ( r_sts > 0 )    // at least one filled container
                     {
                         r_ptr_word++;
@@ -264,7 +257,6 @@ public:
                 r_ptr_word = 0;
                 memset(r_cont[r_ptr_cont], 0, NIC_CONTAINER_SIZE);
                 r_ptr_cont = (r_ptr_cont + 1) % 2;
-                //printf("le futur container en lecture sera %d\n",r_ptr_cont);
                 r_sts      = r_sts - 1;
             }
         

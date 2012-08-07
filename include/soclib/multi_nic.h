@@ -21,11 +21,13 @@
  *
  * Copyright (c) UPMC, Lip6, Asim
  *         Alain Greiner <alain.greiner@lip6.fr>, 2012
+ *         Clement Devigne <clement.devigne@etu.upmc.fr>
  *
  * Maintainers: alain
  */
 #ifndef MULTI_NIC_REGS_H
 #define MULTI_NIC_REGS_H
+#define m_channel 8
 
 enum SoclibMultiNicGlobalRegisters {
     TX_WOK,
@@ -62,6 +64,7 @@ enum SoclibMultiNicGlobalRegisters {
     GENERAL_MAC_4,
     GENERAL_MAC_2,
     NIC_ON,
+    BROADCAST_ENABLE,
 };
 
 /*enum SoclibMultiNicChannelsRegisters {
