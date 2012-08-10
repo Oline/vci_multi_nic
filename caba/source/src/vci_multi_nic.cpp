@@ -90,9 +90,11 @@ static uint32_t crc_table[] =
 //This function is used for return the value of status registers or stats registers
 tmpl(uint32_t)::read_register(uint32_t addr)
 {
-    uint32_t sel_register;
-    size_t channel = (size_t)((addr & 0x0001C000) >> 14);
-    size_t cell    = (size_t)((addr & 0x00001FFF) >> 2);
+    uint32_t    sel_register;
+    bool        physical     = ((addr & (nic_nb_channel << 14); // if 0 -> access to the channel
+                                                                // if 1 -> access to the hypervisor reserved configuration/status registers
+    size_t      channel      = (size_t)((addr & ((nic_nb_channel - 1) << 14)) >> 14); // Number of channel is generic here
+    size_t      cell         = (size_t)((addr & 0x00001FFF) >> 2);
 
     if ( p_vci.rspack.read() )
     {
