@@ -27,15 +27,22 @@
  */
 #ifndef MULTI_NIC_REGS_H
 #define MULTI_NIC_REGS_H
-#define m_channel 8
+//#define m_channel 8
+#define NB_NIC_CHANNELS 8
 
-enum SoclibMultiNicGlobalRegisters {
-    TX_WOK,
-    TX_CLOSE,
-    RX_ROK,
-    RX_RELEASE,
-    MAC_4,
-    MAC_2,
+enum SoclibMultiNicHyperviseurConfigurationRegisters {
+    // CHANNEL MANAGEMENT
+    VIS,                         // bitfield where bit N means : 0 -> channel N is disabled, 1 -> channel N is enabled
+    GENERAL_CHAN_MAC_ADDR_SET,   // bitfield where bit N means : 0 -> channel N has NO MAC addr, 1 -> channel N has a MAC addr set
+    // CONTROLER MANAGEMENT
+    GENERAL_MAC_4,
+    GENERAL_MAC_2,
+    NIC_ON,
+    BROADCAST_ENABLE,
+    TDM_ENABLE,
+    TDM_TIMERS,
+};
+enum SoclibMultiNicHyperviseurStatusRegisters {
     // RX_G2S
     RX_PKT,                     // Count every packets going through stage 1
     RX_CRC_SUCCESS,             // Successful CRC packets
@@ -55,21 +62,19 @@ enum SoclibMultiNicGlobalRegisters {
     TX_PKT,
     TX_ERR_SMALL,
     TX_ERR_OVERFLOW,
-    // TX_ S2G
-    // // TODO
-    // CHANNEL MANAGEMENT
-    VIS,       // bitfield where bit N means : 0 -> channel N is disabled, 1 -> channel N is enabled
-    GENERAL_CHAN_MAC_ADDR_SET,          // bitfield where bit N means : 0 -> channel N has NO MAC addr, 1 -> channel N has a MAC addr set
-    // CONTROLER MANAGEMENT
-    GENERAL_MAC_4,
-    GENERAL_MAC_2,
-    NIC_ON,
-    BROADCAST_ENABLE,
+    TX_REG,
 };
-
-/*enum SoclibMultiNicChannelsRegisters {
-
-};*/
+enum SoclibMultiNicChannelsConfigurationRegisters {
+    RX_RELEASE,
+    TX_CLOSE,
+    TIMEOUT,
+};
+enum SoclibMultiNicChannelsStatusRegisters {
+    RX_ROK,
+    TX_WOK,
+    MAC_4,
+    MAC_2,
+};
 
 #endif 
 

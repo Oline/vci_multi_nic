@@ -54,6 +54,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <iomanip>
 
 namespace soclib { 
 namespace caba {
@@ -70,6 +71,7 @@ class NicTxGmii
     // registers
     uint32_t            r_counter;      // cycles counter (used for both gap and plen)
     uint8_t*	        r_buffer;       // local buffer containing one packet
+    
 
     ///////////////////////////////////////////////////////////////////
     // This function is used to write one packet to the input file
@@ -80,13 +82,56 @@ class NicTxGmii
         if (m_file)
         {
             uint32_t cpt = 0;
+            uint32_t data = 0;
             // ecrit dans le fichier (debut de ligne) la valeur de r_counter et un caractere d'espacement
             m_file << (unsigned)r_counter << ' ';
-            for (cpt = 0; cpt < (r_counter) ; cpt ++) // peut etre (r_counter << 1)
+            for (cpt = 0; cpt < (r_counter - 4) ; cpt += 4) // peut etre (r_counter << 1)
             {
+                data = r_buffer[cpt];
+
+                if( (cpt+1) >= (r_counter-4) )
+                {
+                    m_file <<std::setfill('0')<<std::setw(2)<< std::hex << data;
+                    break;
+                }
+                data = data | (r_buffer[cpt+1]<<8);
+                
+                if( (cpt+2) >= (r_counter-4) )
+                {
+                    m_file <<std::setfill('0')<<std::setw(4)<< std::hex << data;
+                    break;
+                }
+                data = data | (r_buffer[cpt+2]<<16);
+                
+                if( (cpt+3) >= (r_counter-4) )
+                {
+                    m_file <<std::setfill('0')<<std::setw(6)<< std::hex << data;
+                    break;
+                }
+                data = data | (r_buffer[cpt+3]<<24);
+
+                /*if( (cpt+3) >= (r_counter-4))
+                {
+                    printf("PADDING INTO FILE !!!\n");
+                    printf("CPT =%d and r_counter = %d\n",cpt,r_counter);
+                    uint32_t padding = 4 - (r_counter&0x3);
+                    printf("PADDING INTO FILE =%d\n",padding);
+                    uint32_t mask = 0xFFFFFFFF;
+                    data = data & (mask>>(padding<<3));
+                    printf("DATA LAST INTO FILE =%x\n",data);
+                }*/
+
                 //ecrit dans le fichier r_buffer[cpt]
-                m_file << std::hex << (unsigned)r_buffer[cpt] << " ";
+                //m_file <<std::setfill('0')<<std::setw(2)<< std::hex << (unsigned)r_buffer[cpt];
+                m_file <<std::setfill('0')<<std::setw(8)<< std::hex << data;
+                //std::cout <<std::hex << data;
             }
+            data = r_buffer[r_counter-4];
+            data = data | (r_buffer[r_counter-3]<<8);
+            data = data | (r_buffer[r_counter-2]<<16);
+            data = data | (r_buffer[r_counter-1]<<24);
+            m_file <<std::setfill('0')<<std::setw(8)<< std::hex << data;
+
             // quand le packet est ecrit en entier ecrit un retour a la ligne dans le fichier
             m_file << std::dec << std::endl;
         }
