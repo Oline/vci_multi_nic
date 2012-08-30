@@ -216,7 +216,9 @@ public:
                 // close current container if time-out
                 if ( r_timer <= 0 ) 
                     {
-                        printf("CLOSE BY TIMEOUT\n");
+//#ifdef SOCLIB_NIC_DEBUG
+printf("CLOSE BY TIMEOUT\n");
+//#endif
                         //r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
                         r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
                         r_ptw_word                  =((MAX_PACKET>>1)+1);
@@ -238,7 +240,6 @@ public:
         
         if ( cmd_r == RX_CHANNEL_RCMD_READ )       // read one container word
             {
-                //printf("READING CHANNEL RX timer = %d\n",r_timer);
                 assert( (r_ptr_word < NIC_CONTAINER_SIZE) and
                         "ERROR in NIC_RX_CHANNEL : read pointer overflow" );
                 if ( r_sts > 0 )    // at least one filled container
@@ -253,7 +254,6 @@ public:
             }
         else if ( cmd_r == RX_CHANNEL_RCMD_RELEASE ) // release the current container
             {
-                //printf("RELEASING CHANNEL RX timer = %d\n",r_timer);
                 r_ptr_word = 0;
                 memset(r_cont[r_ptr_cont], 0, NIC_CONTAINER_SIZE);
                 r_ptr_cont = (r_ptr_cont + 1) % 2;
@@ -308,7 +308,7 @@ public:
     }
 
     /////////////////////////////////////////////////////////////
-    // This method returns true if there is a free container.
+    // This method returns the current value of timeout.
     // It does not modify the channel state.
     /////////////////////////////////////////////////////////////
     int32_t get_r_timer()
@@ -316,6 +316,18 @@ public:
         return r_timer;
     }
     
+    /////////////////////////////////////////////////////////////
+    // This method returns the value of init timeout.
+    /////////////////////////////////////////////////////////////
+    int32_t get_m_timeout()
+    {
+        return m_timeout;
+    
+    }
+    /////////////////////////////////////////////////////////////
+    // This method set a new value for init timeout.
+    /////////////////////////////////////////////////////////////
+
     void set_timeout (uint32_t timeout)
     {
         m_timeout = timeout;

@@ -74,6 +74,7 @@ class NicRxGmii
     bool                r_fsm_gap;      // inter_packet state when true
     uint32_t            r_counter;      // cycles counter (used for both gap and plen)
     uint8_t*	        r_buffer;       // local buffer containing one packet
+    uint8_t*	        r_buffer_tmp;       // local buffer containing one packet
     uint32_t            r_plen;         // packet length (in bytes)
 
     ///////////////////////////////////////////////////////////////////
@@ -99,30 +100,65 @@ class NicRxGmii
     void read_one_packet()
     {
         if(m_file)
-            {
+        {
                 uint32_t cpt = 0;
                 uint32_t data = 0;
+                uint32_t nb_words = 0;
+                uint32_t nb_bytes_available;
                 std::string string;
                 m_file >> r_plen >> string;
+                nb_bytes_available = r_plen-4;
+                uint32_t i = 0;
+                //la variable string recoit le packet en entier
+                
+                // on verifie qu'on est a la fin du fichier pour le remettre au debut
                 if(m_file.eof())
-                    {
-                        //printf("FIN DU FICHIER\n");
+                {
                         m_file.clear();
                         m_file.seekg(0, std::ios::beg);
-                        //printf("REMISE A ZERO DU FICHIER\n");
                         m_file >> r_plen >> string;
-                    }
+                }
+                // on parcourt la variable string (on transforme la valeur ascii en hexa)
                 for(cpt = 0; cpt < (r_plen << 1) ; cpt++)
+                {
+                    string[cpt] = atox(string[cpt]);
+                    data = (data << 4)|string[cpt];
+                    if(cpt%2)
                     {
-                        string[cpt] = atox(string[cpt]);
-                        data = (data << 4)|string[cpt];
-                        if((cpt%2))
-                            {
-                                r_buffer[cpt>>1] = data;
-                                data = 0;
-                            }
+                        r_buffer_tmp[cpt>>1]    = data;
+                        data = 0;
                     }
-            }
+                }
+                cpt = 0;
+                while(nb_bytes_available)
+                {
+                    //std::cout << nb_bytes_available << std::endl;
+                    if(nb_bytes_available > 3)
+                        i = ((nb_words + 1)<<2) - 1;
+                    else
+                        i = ((nb_words + 1)<<2) - (4 - nb_bytes_available) - 1;
+                    while ( i >= (nb_words << 2) )
+                    {
+                        //std::cout << i << " " << (nb_words <<2)<<std::endl;
+                        r_buffer[i] = r_buffer_tmp[cpt];
+                        nb_bytes_available -- ;
+                        cpt ++ ;
+                        if ( i%4 == 0 )
+                        {
+                            nb_words ++ ;
+                            break;
+                        }
+                        else i--;
+                    }
+                }
+                r_buffer[r_plen-4] = r_buffer_tmp[r_plen-1];
+                r_buffer[r_plen-3] = r_buffer_tmp[r_plen-2];
+                r_buffer[r_plen-2] = r_buffer_tmp[r_plen-3];
+                r_buffer[r_plen-1] = r_buffer_tmp[r_plen-4];
+                /*for(cpt = 0; cpt < (r_plen); cpt++)
+                    printf("%x ",r_buffer[cpt]);
+                printf("\n");*/
+        }
     }
 
 public:
@@ -148,7 +184,7 @@ public:
     if(on == 1)
     {
         if ( r_fsm_gap )    // inter-packet state
-            {
+        {
                 *dv = false;
                 *er = false;
                 *dt = 0;
@@ -156,13 +192,13 @@ public:
                 r_counter = r_counter - 1;
 
                 if (r_counter == 0 ) // end of gap
-                    {
+                {
                         r_fsm_gap = false;
                         read_one_packet();
-                    }
-            }
+                }
+        }
         else    // running packet
-            {
+        {
                 *dv = true;
                 *er = false;
                 *dt = r_buffer[r_counter];
@@ -170,11 +206,11 @@ public:
                 r_counter = r_counter + 1;
  
                 if ( r_counter == r_plen ) // end of packet
-                    {
+                {
                         r_counter   = m_gap;
                         r_fsm_gap   = true;
-                    }
-            }
+                }
+        }
     }
     else
     {
@@ -194,6 +230,7 @@ public:
           m_gap( gap ),
           m_file(path.c_str())
     {
+        r_buffer_tmp    = new uint8_t[2048];
         r_buffer        = new uint8_t[2048];
     } // end constructor
 
@@ -203,6 +240,7 @@ public:
     ~NicRxGmii()
     {
         delete [] r_buffer;
+        delete [] r_buffer_tmp;
         m_file.close();
     }
 

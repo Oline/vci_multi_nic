@@ -62,6 +62,13 @@ class VciMultiNic
     uint32_t read_register(uint32_t addr); 
 
     // Global CONFIGURATION and STATUS registers
+
+#ifdef SOCLIB_PERF_NIC
+    sc_signal<uint32_t>                     r_total_len_gmii;
+    sc_signal<uint32_t>                     r_total_len_rx_chan;
+    sc_signal<uint32_t>                     r_total_len_tx_chan;
+    sc_signal<uint32_t>                     r_total_len_tx_gmii;
+#endif
     sc_signal<bool>                         r_broadcast_enable;                 // register broadcast mode enable when 1
     sc_signal<bool>                         r_nic_on;                           // register power enable when 1
     sc_signal<bool>                         r_rx_dispatch_broadcast;            // register set at 1 when broadcast detected
@@ -119,6 +126,7 @@ class VciMultiNic
     sc_signal<uint32_t>                     r_rx_dispatch_channel;                       // channel index
     sc_signal<bool>                         r_rx_dispatch_bp;                            // fifo index
     sc_signal<uint32_t>                     r_rx_dispatch_plen;                          // packet length (bytes)
+    sc_signal<uint32_t>                     r_rx_dispatch_dt0;                          // word value
     sc_signal<uint32_t>                     r_rx_dispatch_data;                          // word value
     sc_signal<uint32_t>                     r_rx_dispatch_words;                         // write words (counter)
     sc_signal<uint32_t>                     r_rx_dispatch_npkt_skip_adrmac_fail; // packet receive skip because of mac addr was wrong/not found for any channel (stat counter)
@@ -129,7 +137,7 @@ class VciMultiNic
     sc_signal<int>                          r_tx_dispatch_fsm;
     sc_signal<size_t>                       r_tx_dispatch_channel;  // channel index
     sc_signal<uint32_t>                     r_tx_dispatch_data;     // word value
-    sc_signal<uint32_t>                     r_tx_dispatch_packets;  // number of packets
+    sc_signal<uint32_t>                     *r_tx_dispatch_packets;  // number of packets for each channels
     sc_signal<uint32_t>                     r_tx_dispatch_words;    // read words counter
     sc_signal<uint32_t>                     r_tx_dispatch_bytes;    // bytes in last word
     sc_signal<bool>                         r_tx_dispatch_first_bytes_pckt;
@@ -143,6 +151,8 @@ class VciMultiNic
     sc_signal<uint32_t>                     r_tx_dispatch_interne;
     sc_signal<uint32_t>                     r_tx_dispatch_pipe_count;
     sc_signal<bool>                         r_tx_dispatch_broadcast;
+    sc_signal<uint32_t>                     r_tx_dispatch_channel_interne_send;
+    sc_signal<uint32_t>                     r_tx_dispatch_ifg;
 
     // TX_S2G registers
     sc_signal<int>                          r_tx_s2g_fsm;
@@ -150,9 +160,16 @@ class VciMultiNic
     sc_signal<uint8_t>                      r_tx_s2g_data;          // local data buffer
     sc_signal<size_t>                       r_tx_s2g_index;         // checksum byte index
 
+    sc_signal<uint32_t>                     r_tx_tdm_enable;
+    sc_signal<uint32_t>                     r_tx_tdm_timer;
+    sc_signal<uint32_t>                     r_tx_chan_sel_tdm;
+    sc_signal<uint32_t>                     *r_tx_chan_tdm_timer;
+
     // channels
     NicRxChannel**                          r_rx_channel;           // array[m_channels]
     NicTxChannel**                          r_tx_channel;           // array[m_channels]
+
+    sc_signal<uint32_t>**                    r_tx_channel_to_channel;
 
     // fifos
     GenericFifo<uint16_t>                   r_rx_fifo_stream;
@@ -184,6 +201,7 @@ public:
         //VCI_WRITE_TX_CLOSE,
         VCI_WRITE_REG,
         VCI_READ_REG,
+        VCI_ERROR,
         /*VCI_READ_RX_ROK,
         VCI_READ_RX_PKT,
         VCI_READ_RX_CRC_SUCCESS,
@@ -234,10 +252,12 @@ public:
         RX_DISPATCH_CHANNEL_SELECT,
         RX_DISPATCH_PACKET_SKIP,
         RX_DISPATCH_GET_WOK,
-        RX_DISPATCH_GET_WOK_BROADCAST,
-        RX_DISPATCH_GET_SPACE_BROADCAST,
+        RX_DISPATCH_GET_CHANNEL_BROADCAST,
+        /*RX_DISPATCH_GET_WOK_BROADCAST,
+        RX_DISPATCH_GET_SPACE_BROADCAST,*/
         RX_DISPATCH_CLOSE_CONT,
         RX_DISPATCH_GET_SPACE,
+        RX_DISPATCH_CHECK_MAC_SRC,
         RX_DISPATCH_READ_WRITE,
         RX_DISPATCH_WRITE_LAST,
     };
@@ -255,6 +275,7 @@ public:
         TX_DISPATCH_WRITE_B1_TX,
         TX_DISPATCH_WRITE_B2_TX,
         TX_DISPATCH_READ_WRITE_TX,
+        TX_DISPATCH_IFG,
         TX_DISPATCH_RELEASE_CONT,
     };
     enum tx_s2g_fsm_state_e {
@@ -279,8 +300,11 @@ public:
     sc_out<bool>* 				            p_rx_irq;
     sc_out<bool>* 				            p_tx_irq;
 
-    void print_trace();
-
+    void print_trace(uint32_t option = 0);
+    uint32_t get_total_len_gmii();
+    uint32_t get_total_len_rx_chan();
+    uint32_t get_total_len_tx_chan();
+    uint32_t get_total_len_tx_gmii();
     VciMultiNic( sc_module_name 			name,
 		const soclib::common::IntTab 		&tgtid,
 		const soclib::common::MappingTable 	&mt,
