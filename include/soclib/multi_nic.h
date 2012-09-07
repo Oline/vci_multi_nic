@@ -74,6 +74,7 @@ enum SoclibMultiNicChannelsStatusRegisters {
     TX_WOK,
     MAC_4,
     MAC_2,
+    RX_NWORDS,
 };
 
 #endif 

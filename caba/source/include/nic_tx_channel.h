@@ -141,6 +141,7 @@ public:
 
         if ( cmd_w == TX_CHANNEL_WCMD_WRITE )       // write one container word
         {
+            //printf("r_ptw_word = %d\n",r_ptw_word);
             assert( (r_ptw_word < NIC_CONTAINER_SIZE) and 
                     "ERROR in NIC_TX_CHANNEL : write pointer overflow" );
 
@@ -186,8 +187,8 @@ printf("TX_channel READ\n");
 #ifdef SOCLIB_NIC_DEBUG
 printf("TX_channel READ LAST\n");
 #endif
-            assert( (r_ptw_word < NIC_CONTAINER_SIZE) and 
-                    "ERROR in NIC_TX_CHANNEL : write pointer overflow" );
+            assert( (r_ptr_word < NIC_CONTAINER_SIZE) and 
+                    "ERROR in NIC_TX_CHANNEL : read pointer overflow" );
 
             assert( (r_pkt_index < MAX_PACKET) and
                     "ERROR in NIC_TX_CHANNEL : packet index larger than 61" );

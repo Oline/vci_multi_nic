@@ -168,6 +168,8 @@ public:
     {
         r_fsm_gap   = true;
         r_counter   = m_gap;
+        memset(r_buffer,0,2048);
+        memset(r_buffer_tmp,0,2048);
     }
 
     ///////////////////////////////////////////////////////////////////
@@ -178,11 +180,11 @@ public:
     ///////////////////////////////////////////////////////////////////
     void get( bool*     dv,         // data valid
               bool*     er,         // data error
-              uint8_t*  dt,         // data value
-              bool      on)         // power enable
+              uint8_t*  dt  )        // data value
+              //bool      on)         // power enable
     {
-    if(on == 1)
-    {
+    //if(on == 1)
+    //{
         if ( r_fsm_gap )    // inter-packet state
         {
                 *dv = false;
@@ -211,13 +213,13 @@ public:
                         r_fsm_gap   = true;
                 }
         }
-    }
-    else
-    {
-        *dv = false;
-        *er = false;
-        *dt = 0;
-    }
+    //}
+    //else
+    //{
+        //*dv = false;
+        //*er = false;
+        //*dt = 0;
+    //}
     } // end get()
                 
     //////////////////////////////////////////////////////////////
