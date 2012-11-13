@@ -78,14 +78,13 @@ class NicTxGmii
     ///////////////////////////////////////////////////////////////////
     void write_one_packet()
     {
-        //assert( false and "function write_paket of GMII_TX not defined");
         if (m_file)
         {
             uint32_t cpt = 0;
             uint32_t data = 0;
-            // ecrit dans le fichier (debut de ligne) la valeur de r_counter et un caractere d'espacement
+            // write in the file r_counter value
             m_file << (unsigned)r_counter << ' ';
-            for (cpt = 0; cpt < (r_counter - 4) ; cpt += 4) // peut etre (r_counter << 1)
+            for (cpt = 0; cpt < (r_counter - 4) ; cpt += 4)
             {
                 data = r_buffer[cpt];
 
@@ -110,29 +109,14 @@ class NicTxGmii
                 }
                 data = data | (r_buffer[cpt+3]<<24);
 
-                /*if( (cpt+3) >= (r_counter-4))
-                {
-                    printf("PADDING INTO FILE !!!\n");
-                    printf("CPT =%d and r_counter = %d\n",cpt,r_counter);
-                    uint32_t padding = 4 - (r_counter&0x3);
-                    printf("PADDING INTO FILE =%d\n",padding);
-                    uint32_t mask = 0xFFFFFFFF;
-                    data = data & (mask>>(padding<<3));
-                    printf("DATA LAST INTO FILE =%x\n",data);
-                }*/
-
-                //ecrit dans le fichier r_buffer[cpt]
-                //m_file <<std::setfill('0')<<std::setw(2)<< std::hex << (unsigned)r_buffer[cpt];
+                //write data from r_buffer[cpt] in the file
                 m_file <<std::setfill('0')<<std::setw(8)<< std::hex << data;
-                //std::cout <<std::hex << data;
             }
             data = r_buffer[r_counter-4];
             data = data | (r_buffer[r_counter-3]<<8);
             data = data | (r_buffer[r_counter-2]<<16);
             data = data | (r_buffer[r_counter-1]<<24);
             m_file <<std::setfill('0')<<std::setw(8)<< std::hex << data;
-
-            // quand le packet est ecrit en entier ecrit un retour a la ligne dans le fichier
             m_file << std::dec << std::endl;
         }
     }
