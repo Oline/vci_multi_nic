@@ -173,7 +173,7 @@ public:
             }
         //////////////////////////////////////////////////////////////////////////
         else if ( cmd_w == RX_CHANNEL_WCMD_LAST )  // write last word in a packet
-            // and write packet length
+                                                   // and write packet length
             {
                 assert( (r_ptw_word < NIC_CONTAINER_SIZE) and 
                         "ERROR in NIC_RX_CHANNEL : write pointer overflow" );
@@ -202,7 +202,6 @@ public:
         //////////////////////////////////////////////////////////////////////////
         else if ( cmd_w == RX_CHANNEL_WCMD_CLOSE ) // close the current container
             {
-                //r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
                 r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
                 r_ptw_word                  =  ((MAX_PACKET>>1)+1);
                 r_ptw_cont                  = (r_ptw_cont + 1) % 2;
@@ -216,10 +215,6 @@ public:
                 // close current container if time-out
                 if ( r_timer <= 0 ) 
                     {
-//#ifdef SOCLIB_NIC_DEBUG
-printf("CLOSE BY TIMEOUT\n");
-//#endif
-                        //r_cont[container_index][r_ptw_cont]    = (r_ptw_word<<16) | r_pkt_index;
                         r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
                         r_ptw_word                  =((MAX_PACKET>>1)+1);
                         r_ptw_cont                  = (r_ptw_cont + 1) % 2;
@@ -272,8 +267,8 @@ printf("CLOSE BY TIMEOUT\n");
     }
 
     /////////////////////////////////////////////////////////////
-    // This method returns the number of words contained in a
-    // container. It does not modify the channel state.
+    // This method returns the number of useful words contained 
+    // in a container. It does not modify the channel state.
     /////////////////////////////////////////////////////////////
     uint32_t nwords()
     { 

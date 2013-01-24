@@ -165,9 +165,6 @@ public:
         
         if ( cmd_r == TX_CHANNEL_RCMD_READ )       // read one packet word
         {
-#ifdef SOCLIB_NIC_DEBUG
-printf("TX_channel READ\n");
-#endif
             assert( (r_ptr_word < NIC_CONTAINER_SIZE) and
                     "ERROR in NIC_TX_CHANNEL : read pointer overflow" );
 
@@ -183,11 +180,8 @@ printf("TX_channel READ\n");
         else if ( cmd_r == TX_CHANNEL_RCMD_LAST )  // read last word in a packet
                                                    // and updates packet index
         {
-#ifdef SOCLIB_NIC_DEBUG
-printf("TX_channel READ LAST\n");
-#endif
-            assert( (r_ptw_word < NIC_CONTAINER_SIZE) and 
-                    "ERROR in NIC_TX_CHANNEL : write pointer overflow" );
+            assert( (r_ptr_word < NIC_CONTAINER_SIZE) and 
+                    "ERROR in NIC_TX_CHANNEL : read pointer overflow" );
 
             assert( (r_pkt_index < MAX_PACKET) and
                     "ERROR in NIC_TX_CHANNEL : packet index larger than 61" );
@@ -205,9 +199,6 @@ printf("TX_channel READ LAST\n");
         }
         else if ( cmd_r == TX_CHANNEL_RCMD_RELEASE ) // release the current container
         {
-#ifdef SOCLIB_NIC_DEBUG
-printf("TX_channel RELEASE\n");
-#endif
             r_pkt_index = 0;
             r_ptr_word  = (MAX_PACKET/2)+1;
             r_ptr_first  = (MAX_PACKET/2)+1;

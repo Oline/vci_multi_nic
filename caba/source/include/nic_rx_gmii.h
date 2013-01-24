@@ -23,8 +23,9 @@
  * Copyright (c) UPMC, Lip6
  *         Alain Greiner <alain.greiner@lip6.fr> July 2008
  *         Clement Devigne <clement.devigne@etu.upmc.fr>
+ *         Sylvain Leroy <sylvain.leroy@lip6.fr>
  *
- * Maintainers: alain 
+ * Maintainers: alain
  */
 
 /*************************************************************************
@@ -39,7 +40,7 @@
  *************************************************************************
  * This object has 3 constructor parameters:
  * - string   name  : module name
- * - string   path  : file pathname     
+ * - string   path  : file pathname
  * - uint32_t gap   : number of cycles between packets
  *************************************************************************/
 
@@ -57,9 +58,9 @@
 #include <fstream>
 
 
-namespace soclib { 
+namespace soclib {
 namespace caba {
-    
+
 using namespace sc_core;
 
 ////////////////
@@ -81,7 +82,7 @@ class NicRxGmii
     // This function is used to convert ascii to hexa.
     ///////////////////////////////////////////////////////////////////
 
-    uint8_t atox (uint8_t el)
+    uint8_t atox(uint8_t el)
     {
         if((el >= 48) and (el <= 57))
             return (el - 48);
@@ -92,34 +93,35 @@ class NicRxGmii
         else
             return -1;
     }
-    
+
     ///////////////////////////////////////////////////////////////////
     // This function is used to read one packet from the input file
     // It must update the r_buffer and the r_plen variables.
     ///////////////////////////////////////////////////////////////////
     void read_one_packet()
     {
-        if(m_file)
+        if (m_file)
         {
                 uint32_t cpt = 0;
                 uint32_t data = 0;
                 uint32_t nb_words = 0;
                 uint32_t nb_bytes_available;
+                //string contains a packet
                 std::string string;
+                uint32_t i = 0;
+
                 m_file >> r_plen >> string;
                 nb_bytes_available = r_plen-4;
-                uint32_t i = 0;
-                //la variable string recoit le packet en entier
-                
-                // on verifie qu'on est a la fin du fichier pour le remettre au debut
-                if(m_file.eof())
+
+                // check end of file and restart it
+                if (m_file.eof())
                 {
                         m_file.clear();
                         m_file.seekg(0, std::ios::beg);
                         m_file >> r_plen >> string;
                 }
-                // on parcourt la variable string (on transforme la valeur ascii en hexa)
-                for(cpt = 0; cpt < (r_plen << 1) ; cpt++)
+                // convert all the char in string into a hexa
+                for (cpt = 0; cpt < (r_plen << 1) ; cpt++)
                 {
                     string[cpt] = atox(string[cpt]);
                     data = (data << 4)|string[cpt];
@@ -130,16 +132,16 @@ class NicRxGmii
                     }
                 }
                 cpt = 0;
-                while(nb_bytes_available)
+
+
+                while (nb_bytes_available)
                 {
-                    //std::cout << nb_bytes_available << std::endl;
-                    if(nb_bytes_available > 3)
+                    if (nb_bytes_available > 3)
                         i = ((nb_words + 1)<<2) - 1;
                     else
                         i = ((nb_words + 1)<<2) - (4 - nb_bytes_available) - 1;
                     while ( i >= (nb_words << 2) )
                     {
-                        //std::cout << i << " " << (nb_words <<2)<<std::endl;
                         r_buffer[i] = r_buffer_tmp[cpt];
                         nb_bytes_available -- ;
                         cpt ++ ;
@@ -155,9 +157,6 @@ class NicRxGmii
                 r_buffer[r_plen-3] = r_buffer_tmp[r_plen-2];
                 r_buffer[r_plen-2] = r_buffer_tmp[r_plen-3];
                 r_buffer[r_plen-1] = r_buffer_tmp[r_plen-4];
-                /*for(cpt = 0; cpt < (r_plen); cpt++)
-                    printf("%x ",r_buffer[cpt]);
-                printf("\n");*/
         }
     }
 
@@ -168,20 +167,20 @@ public:
     {
         r_fsm_gap   = true;
         r_counter   = m_gap;
+        memset(r_buffer,0,2048);
+        memset(r_buffer_tmp,0,2048);
     }
 
     ///////////////////////////////////////////////////////////////////
-    // To reach the 1 Gbyte/s throughput, this method must be called 
+    // To reach the 1 Gbyte/s throughput, this method must be called
     // at all cycles of a 125MHz clock.
-    // It is therefore written as a transition and contains a 
-    // two states FSM to introduce the inter-packet waiting cycles.
+    // It is therefore written as a transition and contains a
+    // two states FSM to introduce the Inter-Frame Gap waiting cycles.
     ///////////////////////////////////////////////////////////////////
     void get( bool*     dv,         // data valid
               bool*     er,         // data error
-              uint8_t*  dt,         // data value
-              bool      on)         // power enable
-    {
-    if(on == 1)
+              uint8_t*  dt  )        // data value
+              //bool      on)         // power enable
     {
         if ( r_fsm_gap )    // inter-packet state
         {
@@ -202,24 +201,17 @@ public:
                 *dv = true;
                 *er = false;
                 *dt = r_buffer[r_counter];
-       
+
                 r_counter = r_counter + 1;
- 
+
                 if ( r_counter == r_plen ) // end of packet
                 {
                         r_counter   = m_gap;
                         r_fsm_gap   = true;
                 }
         }
-    }
-    else
-    {
-        *dv = false;
-        *er = false;
-        *dt = 0;
-    }
     } // end get()
-                
+
     //////////////////////////////////////////////////////////////
     // constructor open the file
     //////////////////////////////////////////////////////////////
@@ -248,7 +240,7 @@ public:
 
 }}
 
-#endif 
+#endif
 
 // Local Variables:
 // tab-width: 4

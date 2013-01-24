@@ -60,6 +60,7 @@
 #include <inttypes.h>
 #include <systemc>
 #include <assert.h>
+#include <string.h>
 #include "arithmetics.h"
 #include "static_assert.h"
 
@@ -143,13 +144,6 @@ public:
         // WCMD registers update (depends only on cmd_w)
         if ( cmd_w == FIFO_MULTI_WCMD_WRITE )       // write one word 
         {
-#ifdef SOCLIB_NIC_DEBUG
-printf("\n***** STATUS FIFO MULTI IN WCMD = WRITE *****\n");
-printf("fifo_multi : r_ptw = %d\n",r_ptw);
-printf("fifo_multi : r_word_count = %d\n",r_word_count);
-printf("fifo_multi : r_sts = %d\n",r_sts);
-printf("fifo_multi : ptw_word = %d\n",ptw_word);
-#endif
             // Data to write
             r_buf[r_ptw]               = dtin;
             
@@ -170,9 +164,6 @@ printf("fifo_multi : ptw_word = %d\n",ptw_word);
         }
         else if ( cmd_w == FIFO_MULTI_WCMD_LAST )  // write last word
         {
-#ifdef SOCLIB_NIC_DEBUG
-printf("\n***** STATUS FIFO MULTI IN WCMD = WRITE LAST *****\n");
-#endif
             r_buf[r_ptw]               = dtin;
             r_plen[r_ptw_buf_save]     = (r_word_count<<2) + 4 - padding;
             r_eop[ptw_buf]             = true;
@@ -257,9 +248,7 @@ printf("\n***** STATUS FIFO MULTI IN WCMD = WRITE LAST *****\n");
         for ( size_t x=0 ; x<m_buffers ; x++)
         {
             if ( r_eop[x] ) 
-            {
                 return true; 
-            }
         }
         return false;
     }
