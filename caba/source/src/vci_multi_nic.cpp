@@ -424,7 +424,7 @@ tmpl(void)::transition()
                         if(hypervisor == 0)
                             {
                                 assert( (channel < m_channels) and
-                                        "VCI_MULTI_NIC error : The channel index (ADDR[16:14] is too large");
+                                        "VCI_MULTI_NIC error : The channel index (ADDR[16:14]) is too large");
                             }
                         /*if (channel > m_channels)
                           r_vci_fsm = VCI_ERROR;
@@ -699,7 +699,7 @@ tmpl(void)::transition()
     bool    gmii_rx_er;
     uint8_t gmii_rx_data;
 
-
+#ifdef SOCLIB_PERF_NIC
     if (nic_wait_start > 0 or nic_end > 800000)
         {
             gmii_rx_dv = false;
@@ -708,11 +708,14 @@ tmpl(void)::transition()
             nic_wait_start -= 1;
         }
     else
+#endif
         r_gmii_rx.get( &gmii_rx_dv,
                        &gmii_rx_er,
                        &gmii_rx_data);
 
+#ifdef SOCLIB_PERF_NIC
     nic_end += 1;
+#endif
 
     // default values for fifo commands
     bool              rx_fifo_stream_write = false;
@@ -841,18 +844,18 @@ tmpl(void)::transition()
                     (uint32_t)r_rx_g2s_dt1.read() << 24 ;
 
 #ifdef SOCLIB_PERF_NIC
-                r_total_len_gmii = r_total_len_gmii.read() + 1 + IFG ;
+                r_total_len_gmii = r_total_len_gmii.read() + 1 ;
 #endif
 
 #ifdef SOCLIB_NIC_DEBUG
                 printf("\nCHECK = %x\n",check);
-                printf("CHECKSUM_READ = %x\n",r_rx_g2s_checksum.read());
+                printf("RX : CHECKSUM_READ = %x\n",r_rx_g2s_checksum.read());
 #endif
 
                 if ( r_rx_g2s_checksum.read() == check )
                     {
 #ifdef SOCLIB_NIC_DEBUG
-                        printf("CHECKSUM OK !\n");
+                        printf("RX : CHECKSUM OK !\n");
 #endif
                         rx_fifo_stream_write = true;
                         rx_fifo_stream_wdata = r_rx_g2s_dt5.read() | (STREAM_TYPE_EOS << 8);
@@ -861,7 +864,7 @@ tmpl(void)::transition()
                 else
                     {
 #ifdef SOCLIB_NIC_DEBUG
-                        printf("CHECKSUM KO !\n");
+                        printf("RX : CHECKSUM KO !\n");
 #endif
                         rx_fifo_stream_write = true;
                         rx_fifo_stream_wdata = r_rx_g2s_dt5.read() | (STREAM_TYPE_ERR << 8);
@@ -1499,7 +1502,7 @@ tmpl(void)::transition()
         case RX_DISPATCH_PACKET_SKIP:	// clear an unexpected packet in source fifo
             {
 #ifdef SOCLIB_NIC_DEBUG
-                printf("PACKET SKIP !\n");
+                printf("RX : PACKET SKIP !\n");
 #endif
 
                 if ( r_rx_dispatch_bp.read() )
@@ -1728,7 +1731,7 @@ tmpl(void)::transition()
                         for ( size_t k = 0 ; (k < m_channels); k++ )
                             {
 #ifdef SOCLIB_PERF_NIC
-                                r_total_len_rx_chan = r_total_len_rx_chan.read() + (4 - rx_channel_padding) + IFG ;
+                                r_total_len_rx_chan = r_total_len_rx_chan.read() + (4 - rx_channel_padding) ;
 #endif
                                 sel_wok = (r_rx_sel_channel_wok.read()>>k)&0x1;
                                 sel_space_timeout_ok = (r_rx_sel_space_timeout_ok.read()>>k)&0x1;
@@ -1745,7 +1748,7 @@ tmpl(void)::transition()
                 else
                     {
 #ifdef SOCLIB_PERF_NIC
-                        r_total_len_rx_chan = r_total_len_rx_chan.read() + (4 - rx_channel_padding) + IFG;
+                        r_total_len_rx_chan = r_total_len_rx_chan.read() + (4 - rx_channel_padding);
 #endif
                         channel = r_rx_dispatch_channel.read();
                         rx_channel_wcmd[channel]     = RX_CHANNEL_WCMD_LAST;
@@ -1806,7 +1809,7 @@ tmpl(void)::transition()
                             for (size_t i = chan_sel_tdm; i < (chan_sel_tdm + m_channels) ; i++)
                                 {
                                     // the disabled channels are not taken into account
-                                    if(((r_channel_active_channels.read()>>(i%m_channels))&0x1) and ((r_channel_mac_addr_set.read()>>(i%m_channels))&0x1))
+                                    if (((r_channel_active_channels.read()>>(i%m_channels))&0x1) and ((r_channel_mac_addr_set.read()>>(i%m_channels))&0x1))
                                         {
                                             chan_sel_tdm = i%m_channels;
                                             break;
@@ -1872,8 +1875,9 @@ tmpl(void)::transition()
                 uint32_t    npkt      = r_tx_channel[channel]->npkt();
                 r_tx_dispatch_packets[channel] = npkt;
 #ifdef SOCLIB_NIC_DEBUG
-                printf("TX_DISPATCH_GET_NPKT : %d\n",npkt);
+                printf("TX_DISPATCH_GET_NPKT for channel %d : %d\n", channel, npkt);
 #endif
+                printf("TX_DISPATCH_GET_NPKT for channel %d : %d\n", channel, npkt);
                 if ((npkt == 0) or (npkt > 66))
                     r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
                 else
@@ -1905,11 +1909,17 @@ tmpl(void)::transition()
 
                 if (plen < 60 ) // pkt too small
                     {
+#ifdef SOCLIB_NIC_DEBUG
+                        printf("NIC_DEBUG : PKT SKIP : packet too small\n");
+#endif
                         r_tx_dispatch_fsm = TX_DISPATCH_SKIP_PKT;
                         r_tx_npkt_small = r_tx_npkt_small.read() + 1;
                     }
                 else if (plen > 1514) // pkt too long
                     {
+#ifdef SOCLIB_NIC_DEBUG
+                        printf("NIC_DEBUG : PKT SKIP : packet too long\n");
+#endif
                         r_tx_dispatch_fsm = TX_DISPATCH_SKIP_PKT;
                         r_tx_npkt_overflow = r_tx_npkt_overflow.read() + 1;
                     }
@@ -1986,20 +1996,23 @@ tmpl(void)::transition()
                         for ( size_t k = 0 ; (k < m_channels) and (found == 0) ; k++ )
                             {
 #ifdef SOCLIB_NIC_DEBUG
-                                printf("addr mac 4 channel [%d] = %x and addr mac 4  = %x\n",k,r_channel_mac_4[k].read(),r_tx_dispatch_dt0.read());
-                                printf("addr mac 2 channel [%d] = %x and addr mac 2  = %x\n",k,r_channel_mac_2[k].read(),data_mac_2_dest);
+                                printf("NIC_DEBUG : addr mac 4 channel [%d] = %x and addr mac 4  = %x\n", k, r_channel_mac_4[k].read(), r_tx_dispatch_dt0.read());
+                                printf("NIC_DEBUG : addr mac 2 channel [%d] = %x and addr mac 2  = %x\n", k, r_channel_mac_2[k].read(), data_mac_2_dest);
 #endif
                                 if ( (r_channel_mac_4[k].read() == r_tx_dispatch_dt0.read() ) and
                                      (r_channel_mac_2[k].read() == data_mac_2_dest) )
                                     {
 #ifdef SOCLIB_NIC_DEBUG
-                                        printf("ENVOIE EN INTERNE\n");
+                                        printf("NIC_DEBUG : ENVOIE EN INTERNE\n");
 #endif
                                         found = 1;
                                         r_tx_dispatch_channel_interne_send = k;
                                         r_tx_dispatch_interne = found;
                                         if(k == channel)
                                             {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf("NIC_DEBUG : PKT SKIP : sending to itself same channel\n");
+#endif
                                                 r_tx_dispatch_fsm = TX_DISPATCH_SKIP_PKT;
                                             }
                                     }
@@ -2022,8 +2035,8 @@ tmpl(void)::transition()
                 r_tx_dispatch_words = r_tx_dispatch_words.read() - 1;
 
 #ifdef SOCLIB_NIC_DEBUG
-                printf("addr mac 4 channel 0 = %x and addr mac 4 src = %x\n",r_channel_mac_4[channel].read(),tmp);
-                printf("addr mac 2 channel 0 = %x and addr mac 2 src = %x\n",r_channel_mac_2[channel].read(),(r_tx_channel[channel]->data()&0x0000FFFF));
+                printf("NIC_DEBUG : addr mac 4 channel 0 = %x and addr mac 4 src = %x\n",r_channel_mac_4[channel].read(),tmp);
+                printf("NIC_DEBUG : addr mac 2 channel 0 = %x and addr mac 2 src = %x\n",r_channel_mac_2[channel].read(),(r_tx_channel[channel]->data()&0x0000FFFF));
 #endif
                 if((r_channel_mac_4[channel].read() ==  (tmp))
                    and (r_channel_mac_2[channel].read() == (r_tx_channel[channel]->data()&0x0000FFFF)))
@@ -2031,14 +2044,14 @@ tmpl(void)::transition()
                         if( (r_tx_dispatch_broadcast == 1) and (r_broadcast_enable.read() == 1) )
                             {
 #ifdef SOCLIB_NIC_DEBUG
-                                printf("sending in broadcast mode\n");
+                                printf("NIC_DEBUG : sending in broadcast mode\n");
 #endif
                                 r_tx_dispatch_fsm = TX_DISPATCH_WRITE_B0_TX;
                             }
                         else if(r_tx_dispatch_interne == 1)
                             {
 #ifdef SOCLIB_NIC_DEBUG
-                                printf("sending in interne mode\n");
+                                printf("NIC_DEBUG : sending in inside mode\n");
 #endif
                                 r_tx_channel_to_channel[channel][target] = r_tx_channel_to_channel[channel][target].read() + 1;
                                 r_tx_dispatch_fsm = TX_DISPATCH_READ_WRITE_BP;
@@ -2046,7 +2059,7 @@ tmpl(void)::transition()
                         else
                             {
 #ifdef SOCLIB_NIC_DEBUG
-                                printf("sending in externe mode\n");
+                                printf("NIC_DEBUG : sending in outside mode\n");
 #endif
                                 r_tx_dispatch_fsm = TX_DISPATCH_WRITE_B0_TX;
                             }
@@ -2054,6 +2067,9 @@ tmpl(void)::transition()
 
                 else
                     {
+#ifdef SOCLIB_NIC_DEBUG
+                        printf("NIC_DEBUG : PKT SKIP : sending to itself same MAC\n");
+#endif
                         r_tx_dispatch_addr_mac_src_fail = r_tx_dispatch_addr_mac_src_fail.read() + 1;
                         r_tx_dispatch_fsm = TX_DISPATCH_SKIP_PKT;
                     }
@@ -2063,7 +2079,7 @@ tmpl(void)::transition()
                                         // and read a new data from selected channel
             {
 #ifdef SOCLIB_NIC_DEBUG
-                printf("TX_DISPATCH_READ_WRITE_BP\n");
+                printf("NIC_DEBUG : TX_DISPATCH_READ_WRITE_BP\n");
 #endif
                 uint32_t  words   = r_tx_dispatch_words.read();
 
@@ -2306,12 +2322,16 @@ tmpl(void)::transition()
                         // if no more packets
                         if (packets == 0)
                             {
-                                r_total_len_tx_chan = r_total_len_tx_chan.read() + IFG;
+#ifdef SOCLIB_PERF_NIC
+                                r_total_len_tx_chan = r_total_len_tx_chan.read();
+#endif
                                 r_tx_dispatch_fsm = TX_DISPATCH_RELEASE_CONT;
                             }
                         else
                             {
-                                r_total_len_tx_chan = r_total_len_tx_chan.read() + IFG;
+#ifdef SOCLIB_PERF_NIC
+                                r_total_len_tx_chan = r_total_len_tx_chan.read();
+#endif
                                 r_tx_dispatch_fsm = TX_DISPATCH_GET_PLEN;
                             }
                     }
@@ -2670,10 +2690,12 @@ tmpl(void)::print_trace(uint32_t option)
     };
     if(option == 1) // used to print all internals registers
     {
+#ifdef SOCLIB_PERF_NIC
         std::cout << "r_total_len_gmii    : " << r_total_len_gmii.read()    << std::endl;
         std::cout << "r_total_len_rx_chan : " << r_total_len_rx_chan.read() << std::endl;
         std::cout << "r_total_len_tx_chan : " << r_total_len_tx_chan.read() << std::endl;
         std::cout << "r_total_len_tx_gmii : " << r_total_len_tx_gmii.read() << std::endl;
+#endif
         std::cout << "r_broadcast_enable  : " << r_broadcast_enable.read()  << std::endl;
         std::cout << "r_nic_on            : " << r_nic_on.read()            << std::endl;
         std::cout << "r_rx_dispatch_broadcast : " << r_rx_dispatch_broadcast.read() << std::endl;
