@@ -36,7 +36,8 @@
 //  by software, or by an external DMA engine.
 //  The data transfer unit between software and the NIC is a container.
 //  A container is a 4K bytes buffer, containing an integer number
-//  of ariable size packets. Packet length is between 64 to 1538 bytes.
+//  of variable size packets. Packet length is between 60 to 1514 bytes
+//  (size without CRC).
 //
 //  The first 34 words of a container are the container descriptor:
 //      word0:       | NB_WORDS          | NB_PACKETS        |
@@ -54,8 +55,8 @@
 //
 //  In order to support various protection mechanisms, each channel takes
 //  a segment of 8 Kbytes in the address space:
-//  - The first 4K bytes contain the configuration and status registers
-//  - The second 4K bytes define the current container.
+//  - The two first 4K bytes contain the configuration and status registers
+//  - The two second 4K bytes define the current container.
 //
 //  There is two IRQ lines for each channel:
 //  - RX_IRQ[k] is activated as soon as ther is at least one RX_container
@@ -73,10 +74,13 @@
 
 namespace soclib { namespace caba {
 
-#define IFG 12
+#define MAC_ADDR_LEN            6
+#define IFG                     12
+#define HARDCODED_MAX_CHAN      8
+#define MTU                     1514
+#define MIN_TRAME_SIZE          60
 
 #ifdef SOCLIB_PERF_NIC
-
 uint32_t nic_wait_start = 400000;
 uint32_t nic_end = 0;
 #endif
@@ -91,7 +95,7 @@ static uint32_t crc_table[] =
 };
 
 
-#define tmpl(t) template<typename vci_param> t VciMultiNic<vci_param>
+#define tmpl(t) template<typename vci_param, typename RX, typename TX> t VciMultiNic<vci_param, RX, TX>
 
 
 ///////////////////////////////////////////
@@ -100,167 +104,337 @@ tmpl(uint32_t)::read_register(uint32_t addr)
 {
     uint32_t sel_register    = 0;
     //size_t   channel         = (size_t)((addr & 0x0003C000) >> 14);
-    size_t   channel         = (size_t)((addr & 0x0001C000) >> 14);
-    size_t   cell            = (size_t)((addr & 0x00001FFF) >> 2);
-    bool     conf_or_status  = (addr >> 12) & 0x1;
-    bool     hypervisor      = (addr & 0x00020000);
+    size_t   channel         = (size_t)((addr & 0x0001C000) >> 14);     // Channel number
+    size_t   cell            = (size_t)((addr & 0x00001FFF) >> 2);      // Register accessed
+    bool     conf_or_status  = (addr >> 12) & 0x1;                      // conf or status page
+    bool     hypervisor      = (addr & 0x00020000);                     // Are we using the hypervisor pages
 
+#ifdef SOCLIB_NIC_DEBUG
+    printf("[NIC][%s]", __func__);
+#endif
     if ( p_vci.rspack.read() )
-    {
-        if(hypervisor == 1)
         {
-            if(conf_or_status == 0)
-            {
-                  switch(cell)
-                  {
-                        case GENERAL_CHAN_MAC_ADDR_SET :
-                        {
-                            sel_register = r_channel_mac_addr_set.read();
-                            break;
-                        }
-                        case VIS :
-                        {
-                            sel_register = r_channel_active_channels.read();
-                            break;
-                        }
-                  }
-            }
-            else
-            {
-                  if ( (cell&0x3FF) < (TX_REG + ((m_channels-1)<<2) ) and ( (cell&0x3FF) >= TX_REG) )
-                  {
-                        uint32_t nb_reg = (cell&0x3FF) - TX_REG;
-                        sel_register = r_tx_channel_to_channel[nb_reg/m_channels][nb_reg % m_channels].read();
-                  }
-                  else
-                  {
-                        switch(cell&0x3FF)
-                        {
-                            case RX_PKT :
-                            {
-                                sel_register = r_rx_g2s_npkt.read();
-                                break;
-                            }
-                            case RX_CRC_SUCCESS :
-                            {
-                                sel_register = r_rx_g2s_npkt_crc_success.read();
-                                break;
-                            }
-                            case RX_CRC_FAIL :
-                            {
-                                sel_register = r_rx_g2s_npkt_crc_fail.read();
-                                break;
-                            }
-                            case RX_ERR_MII :
-                            {
-                                sel_register = r_rx_g2s_npkt_err.read();
-                                break;
-                            }
-                            case RX_MFIFO_SUCCESS :
-                            {
-                                sel_register = r_rx_des_npkt_write_mfifo_success.read();
-                                break;
-                            }
-                            case RX_ERR_SMALL :
-                            {
-                                sel_register = r_rx_des_npkt_small.read();
-                                break;
-                            }
-                            case RX_ERR_OVERFLOW :
-                            {
-                                sel_register = r_rx_des_npkt_overflow.read();
-                                break;
-                            }
-                            case RX_ERR_MFIFO_FULL :
-                            {
-                                sel_register =r_rx_des_npkt_err_mfifo_full.read();
-                                break;
-                            }
-                            case RX_ERR_IN_DES :
-                            {
-                                sel_register = r_rx_des_npkt_err_in_des.read();
-                                break;
-                            }
-                            case RX_CHANNEL_SUCCESS :
-                            {
-                                sel_register = r_rx_dispatch_npkt_wchannel_success.read();
-                                break;
-                            }
-                            case RX_CHANNEL_FAIL :
-                            {
-                                sel_register = r_rx_dispatch_npkt_wchannel_fail.read();
-                                break;
-                            }
-                            case RX_MAC_ADDR_FAIL :
-                            {
-                                sel_register = r_rx_dispatch_npkt_skip_adrmac_fail.read();
-                                break;
-                            }
-                            case TX_PKT :
-                            {
-                                sel_register = r_tx_npkt.read();
-                                break;
-                            }
-                            case TX_ERR_SMALL :
-                            {
-                                sel_register = r_tx_npkt_small.read();
-                                break;
-                            }
-                            case TX_ERR_OVERFLOW :
-                            {
-                                sel_register = r_tx_npkt_overflow.read();
-                                break;
-                            }
-                        }
-                  }
-            }
-        }
-        else
-        {
-            if (conf_or_status == 0)
-            {
-                switch(cell)
+            if (hypervisor == 1)
                 {
-                    case TIMEOUT :
-                    {
-                        sel_register = r_rx_channel[channel]->get_m_timeout();
-                        break;
-                    }
-                }
-            }
+#ifdef SOCLIB_NIC_DEBUG
+                    printf("[HV]");
+#endif
+                    if (conf_or_status == 0)
+                        { // CONF
+#ifdef SOCLIB_NIC_DEBUG
+                            printf("[CONF]");
+#endif
+                            switch(cell)
+                                {
+                                case GENERAL_CHAN_MAC_ADDR_SET :
+                                    {
+                                        sel_register = r_channel_mac_addr_set.read();
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" GENERAL_CHAN_MAC_ADDR_SET = %x\n", sel_register);
+#endif
+                                        break;
+                                    }
+                                case VIS :
+                                    {
+                                        sel_register = r_channel_active_channels.read();
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" VIS = %x\n", sel_register);
+#endif
+                                        break;
+                                    }
+                                case GENERAL_MAC_4 : // Correspond to the chan0 mac addr
+                                    {
+                                        sel_register = r_channel_mac_4[0].read();
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" GENERAL_MAC_4 = %x\n", sel_register);
+#endif
+                                        break;
+                                    }
+                                case GENERAL_MAC_2 : // Correspond to the chan0 mac addr
+                                    {
+                                        sel_register = r_channel_mac_2[0].read();
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" GENERAL_MAC_2 = %x\n", sel_register);
+#endif
+                                        break;
+                                    }
+                                case NIC_ON :
+                                    {
+                                        sel_register = r_nic_on.read();
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" NIC_ON = %x\n", sel_register);
+#endif
+                                        break;
+                                    }
+                                case BROADCAST_ENABLE :
+                                    {
+                                        sel_register = r_broadcast_enable.read();
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" BROADCAST_ENABLE = %x\n", sel_register);
+#endif
+                                        break;
+                                    }
+                                case TDM_ENABLE :
+                                    {
+                                        sel_register = r_tx_tdm_enable.read();
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" TDM_ENABLE = %x\n", sel_register);
+#endif
+                                        break;
+                                    }
+                                case TDM_TIMERS :
+                                    {
+                                        sel_register = r_tx_tdm_timer.read();
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" TDM_TIMERS (Write ONLY register) (current value of the running timer, not the channel TDM timer) = %x\n", sel_register);
+#endif
+                                        break;
+                                    }
+                                default :
+                                    {
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" [ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
+#endif
+                                    }
+                                }
+                        }
+                    else // STATUS
+                        {
+#ifdef SOCLIB_NIC_DEBUG
+                            printf("[STATUS]");
+#endif
+                            // Check we are in the chan to chan matrix
+                            if ( (cell&0x3FF) < (TX_REG + ((m_channels-1)<<2) ) and ( (cell&0x3FF) >= TX_REG) )
+                                {
+                                    // chan to chan matrix
+                                    uint32_t myregister = (cell&0x3FF) - TX_REG;
+                                    uint32_t line = myregister / m_channels;
+                                    uint32_t col = myregister % m_channels;
+                                    sel_register = r_tx_channel_to_channel[line][col].read();
+#ifdef SOCLIB_NIC_DEBUG
+                                    printf(" Internal switching from chan %d to chan %d has value : 0x%x\n", line, col, sel_register);
+#endif
+                                }
+                            else
+                                {
+                                    // regular register
+                                    switch(cell&0x3FF)
+                                        {
+                                        case RX_PKT :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_PKT\n");
+#endif
+                                                sel_register = r_rx_g2s_npkt.read();
+                                                break;
+                                            }
+                                        case RX_CRC_SUCCESS :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" CRC_SUCCESS\n");
+#endif
+                                                sel_register = r_rx_g2s_npkt_crc_success.read();
+                                                break;
+                                            }
+                                        case RX_CRC_FAIL :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_CRC_FAIL\n");
+#endif
+                                                sel_register = r_rx_g2s_npkt_crc_fail.read();
+                                                break;
+                                            }
+                                        case RX_ERR_MII :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_ERR_MII\n");
+#endif
+                                                sel_register = r_rx_g2s_npkt_err.read();
+                                                break;
+                                            }
+                                        case RX_MFIFO_SUCCESS :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_MFIFO_SUCCESS\n");
+#endif
+                                                sel_register = r_rx_des_npkt_write_mfifo_success.read();
+                                                break;
+                                            }
+                                        case RX_ERR_SMALL :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_ERR_SMALL\n");
+#endif
+                                                sel_register = r_rx_des_npkt_small.read();
+                                                break;
+                                            }
+                                        case RX_ERR_OVERFLOW :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_ERR_OVERFLOW\n");
+#endif
+                                                sel_register = r_rx_des_npkt_overflow.read();
+                                                break;
+                                            }
+                                        case RX_ERR_MFIFO_FULL :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_ERR_MFIFO_FULL\n");
+#endif
+                                                sel_register =r_rx_des_npkt_err_mfifo_full.read();
+                                                break;
+                                            }
+                                        case RX_ERR_IN_DES :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_ERR_IN_DES\n");
+#endif
+                                                sel_register = r_rx_des_npkt_err_in_des.read();
+                                                break;
+                                            }
+                                        case RX_CHANNEL_SUCCESS :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_CHANNEL_SUCCESS\n");
+#endif
+                                                sel_register = r_rx_dispatch_npkt_wchannel_success.read();
+                                                break;
+                                            }
+                                        case RX_CHANNEL_FAIL :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_CHANNEL_FAIL\n");
+#endif
+                                                sel_register = r_rx_dispatch_npkt_wchannel_fail.read();
+                                                break;
+                                            }
+                                        case RX_MAC_ADDR_FAIL :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_MAC_ADDR_FAIL\n");
+#endif
+                                                sel_register = r_rx_dispatch_npkt_skip_adrmac_fail.read();
+                                                break;
+                                            }
+                                        case TX_PKT :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" TX_PKT\n");
+#endif
+                                                sel_register = r_tx_npkt.read();
+                                                break;
+                                            }
+                                        case TX_ERR_SMALL :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" ERR_SMALL\n");
+#endif
+                                                sel_register = r_tx_npkt_small.read();
+                                                break;
+                                            }
+                                        case TX_ERR_OVERFLOW :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" RX_ERR_OVERFLOW\n");
+#endif
+                                                sel_register = r_tx_npkt_overflow.read();
+                                                break;
+                                            }
+                                        default :
+                                            {
+#ifdef SOCLIB_NIC_DEBUG
+                                                printf(" [ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
+#endif
+                                            }
+                                        } // end SWITCH CASE
+                                } // end if else (????)
+                        } // end if else (conf or status)
+                } // end HV
             else
-            {
-                    switch(cell&0x3FF)
-                    {
-                        case MAC_4 :
-                        {
-                            sel_register = r_channel_mac_4[channel].read();
-                            break;
+                {
+#ifdef SOCLIB_NIC_DEBUG
+                    printf("[CHAN]");
+#endif
+                    if (conf_or_status == 0)
+                        {// CONF
+#ifdef SOCLIB_NIC_DEBUG
+                            printf("[CONF]");
+#endif
+                            switch(cell)
+                                {
+                                case TIMEOUT :
+                                    {
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" TIMEOUT\n");
+#endif
+                                        sel_register = r_rx_channel[channel]->get_m_timeout();
+                                        break;
+                                    }
+                                default :
+                                    {
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" [ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
+#endif
+                                    }
+                                }
                         }
-                        case MAC_2 :
+                    else
                         {
-                            sel_register = r_channel_mac_2[channel].read();
-                            break;
+#ifdef SOCLIB_NIC_DEBUG
+                            printf("[STATUS]");
+#endif
+                            switch(cell&0x3FF)
+                                {
+                                case MAC_4 :
+                                    {
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" MAC4\n");
+#endif
+                                        sel_register = r_channel_mac_4[channel].read();
+                                        break;
+                                    }
+                                case MAC_2 :
+                                    {
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" MAC2\n");
+#endif
+                                        sel_register = r_channel_mac_2[channel].read();
+                                        break;
+                                    }
+                                case RX_ROK :
+                                    {
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" RX_ROK\n");
+#endif
+                                        sel_register = r_rx_channel[channel]->rok();
+                                        break;
+                                    }
+                                case TX_WOK :
+                                    {
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" TX_WOK\n");
+#endif
+                                        sel_register = r_tx_channel[channel]->wok();
+                                        break;
+                                    }
+                                case RX_NWORDS :
+                                    {
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" RX_NWORDS\n");
+#endif
+                                        sel_register = r_rx_channel[channel]->nwords();
+                                        break;
+                                    }
+                                default :
+                                    {
+#ifdef SOCLIB_NIC_DEBUG
+                                        printf(" [ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
+#endif
+                                    }
+                                }//end switch cell
                         }
-                        case RX_ROK :
-                        {
-                            sel_register = r_rx_channel[channel]->rok();
-                            break;
-                        }
-                        case TX_WOK :
-                        {
-                            sel_register = r_tx_channel[channel]->wok();
-                            break;
-                        }
-                        case RX_NWORDS :
-                        {
-                            sel_register = r_rx_channel[channel]->nwords();
-                            break;
-                        }
-                    }//end switch cell
-            }
+                }
         }
-    }
     return sel_register;
 }
 
@@ -269,6 +443,9 @@ tmpl(void)::transition()
 {
     if (!p_resetn)
         {
+#ifdef SOCLIB_NIC_DEBUG
+            printf("[NIC][%s] Resetting the controller\n", __func__);
+#endif
             r_vci_fsm          = VCI_IDLE;
             r_vci_ptr          = 0;
             r_vci_ptw          = 0;
@@ -353,8 +530,8 @@ tmpl(void)::transition()
             r_tx_fifo_stream.init();
             r_bp_fifo_multi.reset();
 
-            r_gmii_rx.reset();
-            r_gmii_tx.reset();
+            r_backend_rx.reset();
+            r_backend_tx.reset();
 
             for (size_t i = 0 ; i < m_channels ; i ++)
                 {
@@ -364,12 +541,19 @@ tmpl(void)::transition()
                         }
                 }
 
-
             for ( size_t k = 0 ; k < m_channels ; k++ )
                 {
                     r_rx_channel[k]->reset();
                     r_tx_channel[k]->reset();
                 }
+
+            // initialise MAC addr
+            for (size_t i = 0; i < m_channels; i++)
+                {
+                    r_channel_mac_4[i] = (m_macaddr[0] << 24) + (m_macaddr[1] << 16) + (m_macaddr[2] << 8) + (m_macaddr[3]);
+                    r_channel_mac_2[i] = (m_macaddr[4] << 8) + (m_macaddr[5] + i); // MIGHT OVERFLOW !!!!!!!!!!!!!!
+                }
+
             return;
         }
 
@@ -400,9 +584,7 @@ tmpl(void)::transition()
                         typename vci_param::addr_t	address = p_vci.address.read();
                         typename vci_param::cmd_t	cmd     = p_vci.cmd.read();
                         typename vci_param::plen_t  plen    = p_vci.plen.read();
-#ifdef SOCLIB_NIC_DEBUG
-                        printf("addresse vci = %x\n",(uint32_t)address);
-#endif
+
                         assert ( ((plen & 0x3) == 0) and
                                  "ERROR in VCI_MULTI_NIC : PLEN field must be multiple of 4 bytes");
 
@@ -420,8 +602,11 @@ tmpl(void)::transition()
 
                         r_vci_channel  = channel;
                         r_vci_address  = (uint32_t)address;
+#ifdef SOCLIB_NIC_DEBUG
+                        printf("[NIC][VCI_FSM] VCI_IDLE | vci address = %x, plen = %d, channel %x, hypervisor %x, burst %x\n",(uint32_t)address, (uint16_t)plen, channel, hypervisor, burst);
+#endif
 
-                        if(hypervisor == 0)
+                        if (hypervisor == 0)
                             {
                                 assert( (channel < m_channels) and
                                         "VCI_MULTI_NIC error : The channel index (ADDR[16:14]) is too large");
@@ -482,6 +667,10 @@ tmpl(void)::transition()
 
                 assert ( r_tx_channel[channel]->wok() and
                          "ERROR in VCI_MULTI_NIC : tx_channel should not be full in VCI_WRITE_TX_BURST");
+
+#ifdef SOCLIB_NIC_DEBUG
+                printf("[NIC][VCI_FSM] VCI_WRITE_TX_BURST\n");
+#endif
                 /*if( r_tx_channel[channel]->wok() == 0)
                   {
                   r_vci_fsm = VCI_ERROR;
@@ -528,7 +717,7 @@ tmpl(void)::transition()
                         r_vci_ptw        = r_vci_ptw.read() + 1;
                         r_vci_fsm = VCI_IDLE;
 #ifdef SOCLIB_NIC_DEBUG
-                        printf("write LAST in VCI TGT FSM\n");
+                        printf("[NIC][VCI_FSM] VCI_WRITE_TX_LAST : write LAST in VCI TGT FSM\n");
 #endif
                     }
                 break;
@@ -539,6 +728,10 @@ tmpl(void)::transition()
                 size_t channel = r_vci_channel.read();
                 assert ( r_rx_channel[channel]->rok() and
                          "ERROR in VCI_MULTI_NIC : rx_channel should not be empty in VCI_READ_RX_BURST");
+
+#ifdef SOCLIB_NIC_DEBUG
+                printf("[NIC][VCI_FSM] VCI_READ_RX_BURST\n");
+#endif
                 /*if( r_rx_channel[channel]->rok() == 0)
                   {
                   r_vci_fsm = VCI_ERROR;
@@ -558,20 +751,40 @@ tmpl(void)::transition()
         case VCI_WRITE_REG :
             {
                 typename vci_param::addr_t	address = p_vci.address.read();
-                size_t   channel                    = r_vci_channel.read();
-                size_t   cell                       = (size_t)((address & 0x00001FFF) >> 2);
-                bool     conf_or_status             = (address >> 12) & 0x1;
-                bool     hypervisor                 = (address & 0x00020000);
+                size_t   channel                    = r_vci_channel.read();                     // Channel number
+                size_t   cell                       = (size_t)((address & 0x00001FFF) >> 2);    // Register number
+                bool     conf_or_status             = (address >> 12) & 0x1;                    // Configuration or Status registers' page | conf = 0 and status = 1
+                bool     hypervisor                 = (address & 0x00020000);                   // Hypervisor pages or not
+
+#ifdef SOCLIB_NIC_DEBUG
+                printf("[NIC][VCI_FSM] VCI_WRITE_REG | channel %x, register %x, ", channel, cell);
+                if (conf_or_status == 0)
+                    printf("configuration, ");
+                else
+                    printf("status , ");
+                printf("hypervisor %x\n", hypervisor);
+#endif
                 if ( p_vci.rspack.read() )
                     {
-                        if (hypervisor == true)
+                        if (hypervisor == true) // We are in hypervisor registers pages
                             {
-                                if(conf_or_status == 0)
+                                if (conf_or_status == false)
                                     {
-                                        if ( cell < ( TDM_TIMERS + (m_channels) ) and ( cell >= TDM_TIMERS ) )
+                                        if ( cell < (TDM_TIMERS + HARDCODED_MAX_CHAN) and ( cell >= TDM_TIMERS ) ) // Are we in the registers SET_TDM_TIMER array
                                             {
-                                                uint32_t nb_reg = cell - TDM_TIMERS;
-                                                r_tx_chan_tdm_timer[nb_reg % m_channels] = r_vci_wdata.read();
+                                                uint32_t chan = cell - TDM_TIMERS; // We get the channel number
+                                                if (chan < m_channels)
+                                                    {
+#ifdef SOCLIB_NIC_DEBUG
+                                                        printf("[NIC][VCI_FSM] VCI_WRITE_REG | r_tx_chan_tdm_timer[%x] change value 0x%x -> 0x%x\n",
+                                                               chan, (uint32_t)r_tx_chan_tdm_timer[chan], (uint32_t)r_vci_wdata.read());
+#endif
+                                                        // We set the TIMER for that very channel
+                                                        // We MUST do that write for every channel !!!
+                                                        r_tx_chan_tdm_timer[chan] = r_vci_wdata.read();
+                                                    }
+                                                else
+                                                    printf("[NIC][VCI_FSM] VCI_WRITE_REG | Out of TDM_TIMER array\n");
                                             }
                                         else
                                             {
@@ -579,26 +792,41 @@ tmpl(void)::transition()
                                                     {
                                                     case TDM_ENABLE :
                                                         {
+#ifdef SOCLIB_NIC_DEBUG
+                                                            printf("[NIC][VCI_FSM] VCI_WRITE_REG | r_tx_tdm_enable change value %x -> %x\n", (uint32_t)r_tx_tdm_enable, (uint32_t)r_vci_wdata.read());
+#endif
                                                             r_tx_tdm_enable = r_vci_wdata.read();
                                                             break;
                                                         }
                                                     case BROADCAST_ENABLE :
                                                         {
+#ifdef SOCLIB_NIC_DEBUG
+                                                            printf("[NIC][VCI_FSM] VCI_WRITE_REG | r_broadcast_enable change value %x -> %x\n", (uint32_t)r_broadcast_enable, (uint32_t)r_vci_wdata.read());
+#endif
                                                             r_broadcast_enable = r_vci_wdata.read();
                                                             break;
                                                         }
                                                     case NIC_ON :
                                                         {
+#ifdef SOCLIB_NIC_DEBUG
+                                                            printf("[NIC][VCI_FSM] VCI_WRITE_REG | r_nic_on = %x\n", (uint32_t)r_vci_wdata.read());
+#endif
                                                             r_nic_on = r_vci_wdata.read();
                                                             break;
                                                         }
                                                     case VIS :
                                                         {
+#ifdef SOCLIB_NIC_DEBUG
+                                                            printf("[NIC][VCI_FSM] VCI_WRITE_REG | VIS = %x\n", (uint32_t)r_vci_wdata.read());
+#endif
                                                             r_channel_active_channels = r_vci_wdata.read();
                                                             break;
                                                         }
                                                     case GENERAL_CHAN_MAC_ADDR_SET :
                                                         {
+#ifdef SOCLIB_NIC_DEBUG
+                                                            printf("[NIC][VCI_FSM] VCI_WRITE_REG | r_channel_mac_addr_set = %x\n", (uint32_t)r_vci_wdata.read());
+#endif
                                                             r_channel_mac_addr_set = r_vci_wdata.read();
                                                             break;
                                                         }
@@ -606,20 +834,26 @@ tmpl(void)::transition()
                                             }
                                     }
                             }
-                        else
+                        else // We are in users registers pages
                             {
-                                if(conf_or_status == 0)
+                                if (conf_or_status == 0) // Configuration registers
                                     {
                                         switch(cell)
                                             {
                                             case TX_CLOSE :
                                                 {
+#ifdef SOCLIB_NIC_DEBUG
+                                                    printf("[NIC][VCI_FSM] VCI_WRITE_REG | closing TX container\n");
+#endif
                                                     tx_channel_wcmd = TX_CHANNEL_WCMD_CLOSE;
                                                     r_vci_ptw = 0;
                                                     break;
                                                 }
                                             case RX_RELEASE :
                                                 {
+#ifdef SOCLIB_NIC_DEBUG
+                                                    printf("[NIC][VCI_FSM] VCI_WRITE_REG | release RX container\n");
+#endif
                                                     rx_channel_rcmd = RX_CHANNEL_RCMD_RELEASE;
                                                     r_vci_ptr = 0;
                                                     break;
@@ -630,28 +864,37 @@ tmpl(void)::transition()
                                                     if ( r_vci_wdata.read() < 379 )
                                                         {
 #ifdef SOCLIB_NIC_DEBUG
-                                                            printf("TIMEOUT too SMALL\n");
+                                                            printf("[NIC][VCI_FSM] VCI_WRITE_REG | TIMEOUT too SMALL\n");
 #endif
                                                         }
                                                     else
                                                         {
+#ifdef SOCLIB_NIC_DEBUG
+                                                            printf("[NIC][VCI_FSM] VCI_WRITE_REG | set timeout = %x\n", (uint32_t)r_vci_wdata.read());
+#endif
                                                             r_rx_channel[channel]->set_timeout(r_vci_wdata.read());
                                                         }
                                                     break;
                                                 }
                                             }
                                     }
-                                else
+                                else // Status registers
                                     {
-                                        switch(cell&0x3FF)
+                                        switch (cell&0x3FF)
                                             {
                                             case MAC_4 :
                                                 {
+#ifdef SOCLIB_NIC_DEBUG
+                                                    printf("[NIC][VCI_FSM] VCI_WRITE_REG | Writing MAC4 addr : %x\n", (uint32_t)r_vci_wdata.read());
+#endif
                                                     r_channel_mac_4[channel] = r_vci_wdata.read();
                                                     break;
                                                 }
                                             case MAC_2 :
                                                 {
+#ifdef SOCLIB_NIC_DEBUG
+                                                    printf("[NIC][VCI_FSM] VCI_WRITE_REG | Writing MAC2 addr : %x\n", (uint32_t)r_vci_wdata.read());
+#endif
                                                     r_channel_mac_2[channel] = r_vci_wdata.read();
                                                     break;
                                                 }
@@ -665,6 +908,9 @@ tmpl(void)::transition()
             /////////////////////
         case VCI_READ_REG:   // send REG value in VCI response
             {
+#ifdef SOCLIB_NIC_DEBUG
+                printf("[NIC][VCI_FSM] VCI_READ_REG\n");
+#endif
                 if ( p_vci.rspack.read() )
                     {
                         r_vci_fsm = VCI_IDLE;
@@ -675,7 +921,7 @@ tmpl(void)::transition()
         case VCI_ERROR:   // send ERROR in VCI response
             {
 #ifdef SOCLIB_NIC_DEBUG
-                printf("VCI_ERROR\n");
+                printf("[NIC][VCI_FSM] VCI_ERROR\n");
 #endif
                 if ( p_vci.rspack.read() )
                     {
@@ -709,7 +955,7 @@ tmpl(void)::transition()
         }
     else
 #endif
-        r_gmii_rx.get( &gmii_rx_dv,
+        r_backend_rx.get( &gmii_rx_dv,
                        &gmii_rx_er,
                        &gmii_rx_data);
 
@@ -719,7 +965,7 @@ tmpl(void)::transition()
 
     // default values for fifo commands
     bool              rx_fifo_stream_write = false;
-    uint16_t          rx_fifo_stream_wdata;
+    uint16_t          rx_fifo_stream_wdata = 0;
 
     assert( r_rx_fifo_stream.wok() and
             "ERROR in VCI_MULTI_NIC : the rs_fifo_stream should never be full");
@@ -948,7 +1194,7 @@ tmpl(void)::transition()
         case RX_DES_READ_0 :
             {
 #ifdef SOCLIB_NIC_DEBUG
-                printf("RX_DES_READ_0\n");
+                //                printf("RX_DES_READ_0\n");
 #endif
                 uint16_t data;
                 uint32_t type;
@@ -1093,7 +1339,7 @@ tmpl(void)::transition()
                         des_counter_bytes_tmp = r_rx_des_counter_bytes.read() + 1;
                         r_rx_des_counter_bytes = r_rx_des_counter_bytes.read() + 1;
 
-                        if ( des_counter_bytes_tmp > (1518-4) )
+                        if ( des_counter_bytes_tmp > (MTU) )
                             {
 #ifdef SOCLIB_NIC_DEBUG
                                 printf("PACKET OVERFLOW\n");
@@ -1157,7 +1403,7 @@ tmpl(void)::transition()
                         des_counter_bytes_tmp = r_rx_des_counter_bytes.read() + 1;
                         r_rx_des_counter_bytes = r_rx_des_counter_bytes.read() + 1;
 
-                        if ( des_counter_bytes_tmp > (1518-4) )
+                        if ( des_counter_bytes_tmp > (MTU) )
                             {
 #ifdef SOCLIB_NIC_DEBUG
                                 printf("PACKET OVERFLOW\n");
@@ -1220,7 +1466,7 @@ tmpl(void)::transition()
                         des_counter_bytes_tmp = r_rx_des_counter_bytes.read() + 1;
                         r_rx_des_counter_bytes = r_rx_des_counter_bytes.read() + 1;
 
-                        if ( des_counter_bytes_tmp > (1518-4) )
+                        if ( des_counter_bytes_tmp > (MTU) )
                             {
 #ifdef SOCLIB_NIC_DEBUG
                                 printf("PACKET OVERFLOW\n");
@@ -1262,9 +1508,6 @@ tmpl(void)::transition()
 
         case RX_DES_READ_WRITE_3:
             {
-#ifdef SOCLIB_NIC_DEBUG
-                printf("RX_DES_READ_WRITE_3\n");
-#endif
                 uint16_t data;
                 uint32_t type;
                 uint32_t des_counter_bytes_tmp = 0;
@@ -1282,10 +1525,10 @@ tmpl(void)::transition()
                         des_counter_bytes_tmp = r_rx_des_counter_bytes.read() + 1;
                         r_rx_des_counter_bytes = r_rx_des_counter_bytes.read() + 1;
 
-                        if ( des_counter_bytes_tmp > (1518-4) )
+                        if ( des_counter_bytes_tmp > (MTU) )
                             {
 #ifdef SOCLIB_NIC_DEBUG
-                                printf("PACKET OVERFLOW\n");
+                                printf("[NIC][RX_DES] RX_DES_READ_WRITE_3 : PACKET OVERFLOW\n");
 #endif
                                 rx_des_packet_overflow = true;
                             }
@@ -1304,7 +1547,7 @@ tmpl(void)::transition()
                                     {
 
 #ifdef SOCLIB_NIC_DEBUG
-                                        printf("PACKET TOO SMALL : %d is < 64\n", des_counter_bytes_tmp);
+                                        printf("[NIC][RX_DES] RX_DES_READ_WRITE_3 : PACKET TOO SMALL : %d is < 60\n", des_counter_bytes_tmp);
 #endif
                                         r_rx_des_npkt_small = r_rx_des_npkt_small.read() + 1;
                                         r_rx_des_fsm = RX_DES_WRITE_CLEAR;
@@ -1385,7 +1628,7 @@ tmpl(void)::transition()
         case RX_DISPATCH_IDLE:  // ready to start a new packet transfer
             {
 #ifdef SOCLIB_NIC_DEBUG
-                printf("RX_DISPATCH_IDLE\n");
+                //                printf("RX_DISPATCH_IDLE\n");
 #endif
                 if ( r_rx_dispatch_bp.read() )  // previously allocated to bp_fifo
                     {
@@ -1761,7 +2004,7 @@ tmpl(void)::transition()
             }
         } // end switch r_rx_dispatch_fsm
     // test if READ or LAST RCMD on rx_fifo_multi or bp_fifo_multi to fill the pipeline
-    if(rx_fifo_multi_rcmd == FIFO_MULTI_RCMD_READ or rx_fifo_multi_rcmd == FIFO_MULTI_RCMD_LAST or bp_fifo_multi_rcmd == FIFO_MULTI_RCMD_READ or bp_fifo_multi_rcmd == FIFO_MULTI_RCMD_LAST)
+    if (rx_fifo_multi_rcmd == FIFO_MULTI_RCMD_READ or rx_fifo_multi_rcmd == FIFO_MULTI_RCMD_LAST or bp_fifo_multi_rcmd == FIFO_MULTI_RCMD_READ or bp_fifo_multi_rcmd == FIFO_MULTI_RCMD_LAST)
         {
             if ( r_rx_dispatch_bp.read() )
                 r_rx_dispatch_dt0 = r_bp_fifo_multi.data();
@@ -1797,6 +2040,7 @@ tmpl(void)::transition()
         {
             // test if nic power enabled
             if(r_nic_on.read() ==  0)
+                // ?????????????
                 r_tx_tdm_timer = r_tx_chan_tdm_timer[0].read();
             else
                 {
@@ -1829,10 +2073,6 @@ tmpl(void)::transition()
                 bool pwen = r_nic_on.read();
                 if(r_tx_tdm_enable.read() == 1)
                     {
-
-#ifdef SOCLIB_NIC_DEBUG
-                        printf("TX_DISPATCH_IDLE : TDM ENABLE\n");
-#endif
                         uint32_t chan_sel_tdm = r_tx_chan_sel_tdm.read();
                         if( r_tx_channel[chan_sel_tdm]->rok() && pwen)
                             {
@@ -1903,11 +2143,11 @@ tmpl(void)::transition()
                         r_tx_dispatch_words = (plen >> 2) + 1;
                     }
 
-// #ifdef SOCLIB_NIC_DEBUG
-//                 printf("TX_DISPATCH_GET_PLEN : %d %d %d\n",plen,r_tx_dispatch_bytes.get_new_value(),r_tx_dispatch_words.get_new_value() );
-// #endif
+                // #ifdef SOCLIB_NIC_DEBUG
+                //                 printf("TX_DISPATCH_GET_PLEN : %d %d %d\n",plen,r_tx_dispatch_bytes.get_new_value(),r_tx_dispatch_words.get_new_value() );
+                // #endif
 
-                if (plen < 60 ) // pkt too small
+                if (plen < MIN_TRAME_SIZE ) // pkt too small
                     {
 #ifdef SOCLIB_NIC_DEBUG
                         printf("NIC_DEBUG : PKT SKIP : packet too small\n");
@@ -1915,7 +2155,7 @@ tmpl(void)::transition()
                         r_tx_dispatch_fsm = TX_DISPATCH_SKIP_PKT;
                         r_tx_npkt_small = r_tx_npkt_small.read() + 1;
                     }
-                else if (plen > 1514) // pkt too long
+                else if (plen > MTU) // pkt too long
                     {
 #ifdef SOCLIB_NIC_DEBUG
                         printf("NIC_DEBUG : PKT SKIP : packet too long\n");
@@ -2359,7 +2599,7 @@ tmpl(void)::transition()
     // This TX_S2G FSM performs the STREAM to GMII format conversion,
     // computes the checksum, and append this checksum to the packet.
     // The input is the tx_fifo_stream.
-    // The output is the r_gmii_tx module.
+    // The output is the r_backend_tx module.
     ////////////////////////////////////////////////////////////////////////////
 
     // default value for fifo command
@@ -2384,7 +2624,7 @@ tmpl(void)::transition()
                         r_tx_s2g_data       = data & 0xFF;
                         r_tx_s2g_checksum = 0x00000000; // reset checksum
                     }
-                r_gmii_tx.put(false, false,0);
+                r_backend_tx.put(false, false,0);
                 break;
             }
             //////////////////////
@@ -2420,20 +2660,20 @@ tmpl(void)::transition()
                         assert (false and
                                 "ERROR in VCI_MULTI_NIC : tx_fifo should not be empty");
                     }
-                r_gmii_tx.put(true,false,r_tx_s2g_data.read());
+                r_backend_tx.put(true,false,r_tx_s2g_data.read());
                 break;
             }
             ////////////////////
         case TX_S2G_WRITE_LAST_DATA :
             {
                 r_tx_s2g_fsm = TX_S2G_WRITE_CS;
-                r_gmii_tx.put(true,false,r_tx_s2g_data.read());
+                r_backend_tx.put(true,false,r_tx_s2g_data.read());
                 uint32_t crc_tmp_value = 0;
                 // compute CRC
                 crc_tmp_value = (r_tx_s2g_checksum.read() >> 4) ^ crc_table[(r_tx_s2g_checksum.read() ^ (r_tx_s2g_data.read() >> 0)) & 0x0F];
                 r_tx_s2g_checksum = (crc_tmp_value >> 4) ^ crc_table[(crc_tmp_value ^ (r_tx_s2g_data.read() >> 4)) & 0x0F];
 #ifdef SOCLIB_PERF_NIC
-                r_total_len_tx_gmii = r_total_len_tx_gmii.read() + 1 + IFG;
+                r_total_len_tx_gmii = r_total_len_tx_gmii.read() + 1;
 #endif
                 break;
             }
@@ -2465,7 +2705,7 @@ tmpl(void)::transition()
                         r_tx_s2g_fsm   = TX_S2G_IDLE;
                         r_tx_s2g_checksum = 0x00000000;
                     }
-                r_gmii_tx.put(true,false, gmii_data);
+                r_backend_tx.put(true,false, gmii_data);
                 break;
             }
         } // end switch tx_s2g_fsm
@@ -2578,6 +2818,7 @@ tmpl(void)::genMoore()
             p_vci.rtrdid = r_vci_trdid.read();
             p_vci.rpktid = r_vci_pktid.read();
             p_vci.reop   = true;
+            // print_trace(1);
             break;
         }
 
@@ -2591,6 +2832,7 @@ tmpl(void)::genMoore()
             p_vci.rtrdid = r_vci_trdid.read();
             p_vci.rpktid = r_vci_pktid.read();
             p_vci.reop   = true;
+            // print_trace(1);
             break;
         }
         case VCI_ERROR:
@@ -2688,7 +2930,7 @@ tmpl(void)::print_trace(uint32_t option)
         "TX_S2G_WRITE_LAST_DATA",
         "TX_S2G_WRITE_CS",
     };
-    if(option == 1) // used to print all internals registers
+    if (option == 1) // used to print all internals registers
     {
 #ifdef SOCLIB_PERF_NIC
         std::cout << "r_total_len_gmii    : " << r_total_len_gmii.read()    << std::endl;
@@ -2793,143 +3035,148 @@ tmpl(void)::print_trace(uint32_t option)
 ////////////////////////////////////////////////////////////////////
 tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
                          const soclib::common::IntTab 		    &tgtid,
-                         const soclib::common::MappingTable 	&mt,
+                         const soclib::common::MappingTable     &mt,
                          const size_t 				            channels,
                          const char*                            rx_file_pathname,
                          const char*                            tx_file_pathname,
-                         const size_t 				            timeout )
-	    : caba::BaseModule(name),
-
+                         const size_t 				            timeout,
+                         const char                             *macaddr)
+           : caba::BaseModule(name),
 #ifdef SOCLIB_PERF_NIC
-          r_total_len_gmii("r_total_len_gmii"),
-          r_total_len_rx_chan("r_total_len_rx_chan"),
-          r_total_len_tx_chan("r_total_len_tx_chan"),
-          r_total_len_tx_gmii("r_total_len_tx_gmii"),
+           r_total_len_gmii("r_total_len_gmii"),
+           r_total_len_rx_chan("r_total_len_rx_chan"),
+           r_total_len_tx_chan("r_total_len_tx_chan"),
+           r_total_len_tx_gmii("r_total_len_tx_gmii"),
 #endif
-          r_broadcast_enable("r_broadcast_enable"),
-          r_nic_on("r_nic_on"),
-          r_rx_dispatch_broadcast("r_rx_dispatch_broadcast"),
+           r_broadcast_enable("r_broadcast_enable"),
+           r_nic_on("r_nic_on"),
+           r_rx_dispatch_broadcast("r_rx_dispatch_broadcast"),
 
-          r_channel_active_channels("r_channel_active_channels"),
-          r_channel_mac_addr_set("r_channel_mac_addr_set"),
-          r_rx_sel_channel_wok ("r_rx_sel_channel_wok"),
-          r_rx_sel_space_timeout_ok("r_rx_sel_space_timeout_ok"),
+           r_channel_active_channels("r_channel_active_channels"),
+           r_channel_mac_addr_set("r_channel_mac_addr_set"),
+           r_rx_sel_channel_wok ("r_rx_sel_channel_wok"),
+           r_rx_sel_space_timeout_ok("r_rx_sel_space_timeout_ok"),
 
-          r_vci_fsm("r_vci_fsm"),
-          r_vci_srcid("r_vci_srcid"),
-          r_vci_trdid("r_vci_trdid"),
-          r_vci_pktid("r_vci_pktid"),
-          r_vci_wdata("r_vci_wdata"),
-          r_vci_ptw("r_vci_ptw"),
-          r_vci_ptr("r_vci_ptr"),
-          r_vci_nwords("r_vci_nwords"),
-          r_vci_address("r_vci_address"),
+           r_vci_fsm("r_vci_fsm"),
+           r_vci_srcid("r_vci_srcid"),
+           r_vci_trdid("r_vci_trdid"),
+           r_vci_pktid("r_vci_pktid"),
+           r_vci_wdata("r_vci_wdata"),
+           r_vci_ptw("r_vci_ptw"),
+           r_vci_ptr("r_vci_ptr"),
+           r_vci_nwords("r_vci_nwords"),
+           r_vci_address("r_vci_address"),
 
-          r_rx_g2s_fsm("r_rx_g2s_fsm"),
-          r_rx_g2s_checksum("r_rx_g2s_checksum"),
-          r_rx_g2s_dt0("r_rx_g2s_dt0"),
-          r_rx_g2s_dt1("r_rx_g2s_dt1"),
-          r_rx_g2s_dt2("r_rx_g2s_dt2"),
-          r_rx_g2s_dt3("r_rx_g2s_dt3"),
-          r_rx_g2s_dt4("r_rx_g2s_dt4"),
-          r_rx_g2s_dt5("r_rx_g2s_dt5"),
-          r_rx_g2s_delay("r_rx_g2s_delay"),
-          r_rx_g2s_npkt("r_rx_g2s_npkt"),
-          r_rx_g2s_npkt_crc_success("r_rx_g2s_npkt_crc_success"),
-          r_rx_g2s_npkt_crc_fail("r_rx_g2s_npkt_crc_fail"),
-          r_rx_g2s_npkt_err("r_rx_g2s_npkt_err"),
+           r_rx_g2s_fsm("r_rx_g2s_fsm"),
+           r_rx_g2s_checksum("r_rx_g2s_checksum"),
+           r_rx_g2s_dt0("r_rx_g2s_dt0"),
+           r_rx_g2s_dt1("r_rx_g2s_dt1"),
+           r_rx_g2s_dt2("r_rx_g2s_dt2"),
+           r_rx_g2s_dt3("r_rx_g2s_dt3"),
+           r_rx_g2s_dt4("r_rx_g2s_dt4"),
+           r_rx_g2s_dt5("r_rx_g2s_dt5"),
+           r_rx_g2s_delay("r_rx_g2s_delay"),
+           r_rx_g2s_npkt("r_rx_g2s_npkt"),
+           r_rx_g2s_npkt_crc_success("r_rx_g2s_npkt_crc_success"),
+           r_rx_g2s_npkt_crc_fail("r_rx_g2s_npkt_crc_fail"),
+           r_rx_g2s_npkt_err("r_rx_g2s_npkt_err"),
 
-          r_rx_des_fsm("r_rx_des_fsm"),
-          r_rx_des_counter_bytes("r_rx_des_counter_bytes"),
-          r_rx_des_padding("r_rx_des_padding"),
-          r_rx_des_data(soclib::common::alloc_elems<sc_signal<uint8_t> >("r_rx_des_data", 4)),
-          r_rx_des_npkt_err_in_des("r_rx_des_npkt_drop_in_des"),
-          r_rx_des_npkt_write_mfifo_success("r_rx_des_npkt_write_mfifo_success"),
-          r_rx_des_npkt_small("r_rx_des_npkt_small"),
-          r_rx_des_npkt_overflow("r_rx_des_npkt_overflow"),
-          r_rx_des_npkt_err_mfifo_full("r_rx_des_npkt_err_mfifo_full"),
+           r_rx_des_fsm("r_rx_des_fsm"),
+           r_rx_des_counter_bytes("r_rx_des_counter_bytes"),
+           r_rx_des_padding("r_rx_des_padding"),
+           r_rx_des_data(soclib::common::alloc_elems<sc_signal<uint8_t> >("r_rx_des_data", 4)),
+           r_rx_des_npkt_err_in_des("r_rx_des_npkt_drop_in_des"),
+           r_rx_des_npkt_write_mfifo_success("r_rx_des_npkt_write_mfifo_success"),
+           r_rx_des_npkt_small("r_rx_des_npkt_small"),
+           r_rx_des_npkt_overflow("r_rx_des_npkt_overflow"),
+           r_rx_des_npkt_err_mfifo_full("r_rx_des_npkt_err_mfifo_full"),
 
-          r_rx_dispatch_fsm("r_rx_dispatch_fsm"),
-          r_rx_dispatch_channel("r_rx_dispatch_channel"),
-          r_rx_dispatch_bp("r_rx_dispatch_bp"),
-          r_rx_dispatch_plen("r_rx_dispatch_plen"),
-          r_rx_dispatch_dt0("r_rx_dispatch_dt0"),
-          r_rx_dispatch_data("r_rx_dispatch_data"),
-          r_rx_dispatch_words("r_rx_dispatch_words"),
-          r_rx_dispatch_npkt_skip_adrmac_fail("r_rx_dispatch_npkt_skip_adrmac_fail"),
-          r_rx_dispatch_npkt_wchannel_success("r_rx_dispatch_npkt_wchannel_success"),
-          r_rx_dispatch_npkt_wchannel_fail("r_rx_dispatch_npkt_wchannel_fail"),
+           r_rx_dispatch_fsm("r_rx_dispatch_fsm"),
+           r_rx_dispatch_channel("r_rx_dispatch_channel"),
+           r_rx_dispatch_bp("r_rx_dispatch_bp"),
+           r_rx_dispatch_plen("r_rx_dispatch_plen"),
+           r_rx_dispatch_dt0("r_rx_dispatch_dt0"),
+           r_rx_dispatch_data("r_rx_dispatch_data"),
+           r_rx_dispatch_words("r_rx_dispatch_words"),
+           r_rx_dispatch_npkt_skip_adrmac_fail("r_rx_dispatch_npkt_skip_adrmac_fail"),
+           r_rx_dispatch_npkt_wchannel_success("r_rx_dispatch_npkt_wchannel_success"),
+           r_rx_dispatch_npkt_wchannel_fail("r_rx_dispatch_npkt_wchannel_fail"),
 
-          r_tx_dispatch_fsm("r_tx_dispatch_fsm"),
-          r_tx_dispatch_channel("r_tx_dispatch_channel"),
-          r_tx_dispatch_data("r_tx_dispatch_data"),
-          //r_tx_dispatch_packets("r_tx_dispatch_packets"),
-          r_tx_dispatch_words("r_tx_dispatch_words"),
-          r_tx_dispatch_bytes("r_tx_dispatch_bytes"),
-          r_tx_dispatch_first_bytes_pckt("r_tx_dispatch_first_bytes_pckt"),
-          r_tx_npkt("r_tx_npkt"),
-          r_tx_npkt_overflow("r_tx_npkt_overflow"),
-          r_tx_npkt_small("r_tx_npkt_small"),
-          r_tx_dispatch_addr_mac_src_fail("r_tx_dispatch_addr_mac_src_fail"),
-          r_tx_dispatch_dt0("r_tx_dispatch_dt0"),
-          r_tx_dispatch_dt1("r_tx_dispatch_dt1"),
-          r_tx_dispatch_dt2("r_tx_dispatch_dt2"),
-          r_tx_dispatch_interne("r_tx_dispatch_interne"),
-          r_tx_dispatch_pipe_count("r_tx_dispatch_pipe_count"),
-          r_tx_dispatch_broadcast("r_tx_dispatch_broadcast"),
-          r_tx_dispatch_channel_interne_send("r_tx_dispatch_channel_interne_send"),
-          r_tx_dispatch_ifg("r_tx_dispatch_ifg"),
-          r_tx_s2g_fsm("r_tx_s2g_fsm"),
-          r_tx_s2g_checksum("r_tx_s2g_checksum"),
-          r_tx_s2g_data("r_tx_s2g_data"),
-          r_tx_s2g_index("r_tx_s2g_index"),
+           r_tx_dispatch_fsm("r_tx_dispatch_fsm"),
+           r_tx_dispatch_channel("r_tx_dispatch_channel"),
+           r_tx_dispatch_data("r_tx_dispatch_data"),
+           //r_tx_dispatch_packets("r_tx_dispatch_packets"),
+           r_tx_dispatch_words("r_tx_dispatch_words"),
+           r_tx_dispatch_bytes("r_tx_dispatch_bytes"),
+           r_tx_dispatch_first_bytes_pckt("r_tx_dispatch_first_bytes_pckt"),
+           r_tx_npkt("r_tx_npkt"),
+           r_tx_npkt_overflow("r_tx_npkt_overflow"),
+           r_tx_npkt_small("r_tx_npkt_small"),
+           r_tx_dispatch_addr_mac_src_fail("r_tx_dispatch_addr_mac_src_fail"),
+           r_tx_dispatch_dt0("r_tx_dispatch_dt0"),
+           r_tx_dispatch_dt1("r_tx_dispatch_dt1"),
+           r_tx_dispatch_dt2("r_tx_dispatch_dt2"),
+           r_tx_dispatch_interne("r_tx_dispatch_interne"),
+           r_tx_dispatch_pipe_count("r_tx_dispatch_pipe_count"),
+           r_tx_dispatch_broadcast("r_tx_dispatch_broadcast"),
+           r_tx_dispatch_channel_interne_send("r_tx_dispatch_channel_interne_send"),
+           r_tx_dispatch_ifg("r_tx_dispatch_ifg"),
+           r_tx_s2g_fsm("r_tx_s2g_fsm"),
+           r_tx_s2g_checksum("r_tx_s2g_checksum"),
+           r_tx_s2g_data("r_tx_s2g_data"),
+           r_tx_s2g_index("r_tx_s2g_index"),
 
-          r_tx_tdm_enable("r_tx_tdm_enable"),
-          r_tx_tdm_timer("r_tx_tdm_timer"),
-          r_tx_chan_sel_tdm("r_tx_chan_sel_tdm"),
+           r_tx_tdm_enable("r_tx_tdm_enable"),
+           r_tx_tdm_timer("r_tx_tdm_timer"),
+           r_tx_chan_sel_tdm("r_tx_chan_sel_tdm"),
 
-          r_rx_fifo_stream("r_rx_fifo_stream", 2),      // 2 slots of one byte
-          r_rx_fifo_multi("r_rx_fifo_multi", 32, 32),   // 1024 slots of one word
-          r_tx_fifo_stream("r_tx_fifo_stream", 2),      // 2 slots of one byte
-          r_bp_fifo_multi("r_bp_fifo_multi", 32, 32),   // 1024 slots of one word
+           r_rx_fifo_stream("r_rx_fifo_stream", 2),      // 2 slots of one byte
+           r_rx_fifo_multi("r_rx_fifo_multi", 32, 32),   // 1024 slots of one word
+           r_tx_fifo_stream("r_tx_fifo_stream", 2),      // 2 slots of one byte
+           r_bp_fifo_multi("r_bp_fifo_multi", 32, 32),   // 1024 slots of one word
 
-          r_gmii_rx("r_gmii_rx", "in-mixte.txt", IFG),  // IFG (default = 12) cycle between packets
-          r_gmii_tx("r_gmii_tx", "out_tx.txt"),
+           r_backend_rx("r_backend_rx", rx_file_pathname, IFG),
+           r_backend_tx("r_backend_tx", tx_file_pathname),
 
-          m_segment(mt.getSegment(tgtid)),
-          m_channels(channels),
+           m_segment(mt.getSegment(tgtid)),
+           m_channels(channels),
 
-          p_clk("p_clk"),
-          p_resetn("p_resetn"),
-          p_vci("p_vci"),
-          p_rx_irq(soclib::common::alloc_elems<sc_core::sc_out<bool> >("p_rx_irq", channels)),
-          p_tx_irq(soclib::common::alloc_elems<sc_core::sc_out<bool> >("p_tx_irq", channels))
+           p_clk("p_clk"),
+           p_resetn("p_resetn"),
+           p_vci("p_vci"),
+           p_rx_irq(soclib::common::alloc_elems<sc_core::sc_out<bool> >("p_rx_irq", channels)),
+           p_tx_irq(soclib::common::alloc_elems<sc_core::sc_out<bool> >("p_tx_irq", channels))
 {
     assert( (vci_param::B == 4) and
-    "VCI_MULTI_NIC error : The VCI DATA field must be 32 bits");
+            "VCI_MULTI_NIC error : The VCI DATA field must be 32 bits");
 
     assert( (channels <= 8)  and
-    "VCI_MULTI_NIC error : The number of channels cannot be larger than 8");
+            "VCI_MULTI_NIC error : The number of channels cannot be larger than 8");
 
     r_rx_channel = new NicRxChannel*[channels];
     r_tx_channel = new NicTxChannel*[channels];
 
     r_channel_mac_4       = new sc_signal<uint32_t>[channels];
     r_channel_mac_2       = new sc_signal<uint32_t>[channels];
+
+    // Set the default MAC addr
+    for ( size_t k = 0; k < MAC_ADDR_LEN; k++)
+        m_macaddr[k] = macaddr[k];
+
     r_tx_chan_tdm_timer   = new sc_signal<uint32_t>[channels];
     r_tx_dispatch_packets = new sc_signal<uint32_t>[channels];
 
     r_tx_channel_to_channel = new sc_signal<uint32_t>*[channels];
-    for ( size_t k=0 ; k<channels ; k++)
-    {
-        r_tx_channel_to_channel[k] = new sc_signal<uint32_t>[channels];
-    }
+    for ( size_t k=0 ; k < channels ; k++)
+        {
+            r_tx_channel_to_channel[k] = new sc_signal<uint32_t>[channels];
+        }
 
-    for ( size_t k=0 ; k<channels ; k++)
-    {
-        r_rx_channel[k] = new NicRxChannel("r_rx_channel", timeout);
-        r_tx_channel[k] = new NicTxChannel("r_tx_channel");
-    }
+    for ( size_t k=0 ; k < channels ; k++)
+        {
+            r_rx_channel[k] = new NicRxChannel("r_rx_channel", timeout);
+            r_tx_channel[k] = new NicTxChannel("r_tx_channel");
+        }
 
     SC_METHOD(transition);
     dont_initialize();
