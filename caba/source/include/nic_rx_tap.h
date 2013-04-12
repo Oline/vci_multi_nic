@@ -61,7 +61,7 @@ class NicRxTap
     // structure constants
     const std::string   m_name;
     const uint32_t	    m_gap;
-    std::ifstream       m_path;
+    std::ifstream       m_ifp; // named path
 
     // registers
     bool                r_fsm_gap;      // inter_packet state when true
@@ -97,64 +97,64 @@ class NicRxTap
     ///////////////////////////////////////////////////////////////////
     void read_one_packet()
     {
-        // if (m_ifp)
-        // {
-        //         uint32_t cpt = 0;
-        //         uint32_t data = 0;
-        //         uint32_t nb_words = 0;
-        //         uint32_t nb_bytes_available;
-        //         //string contains a packet
-        //         std::string string;
-        //         uint32_t i = 0;
+        if (m_ifp)
+        {
+                uint32_t cpt = 0;
+                uint32_t data = 0;
+                uint32_t nb_words = 0;
+                uint32_t nb_bytes_available;
+                //string contains a packet
+                std::string string;
+                uint32_t i = 0;
 
-        //         m_ifp >> r_plen >> string;
-        //         nb_bytes_available = r_plen-4;
+                m_ifp >> r_plen >> string;
+                nb_bytes_available = r_plen-4;
 
-        //         // check end of file and restart it
-        //         if (m_ifp.eof())
-        //         {
-        //                 m_ifp.clear();
-        //                 m_ifp.seekg(0, std::ios::beg);
-        //                 m_ifp >> r_plen >> string;
-        //         }
-        //         // convert all the char in string into a hexa
-        //         for (cpt = 0; cpt < (r_plen << 1) ; cpt++)
-        //         {
-        //             string[cpt] = atox(string[cpt]);
-        //             data = (data << 4)|string[cpt];
-        //             if(cpt%2)
-        //             {
-        //                 r_buffer_tmp[cpt>>1]    = data;
-        //                 data = 0;
-        //             }
-        //         }
-        //         cpt = 0;
+                // check end of file and restart it
+                if (m_ifp.eof())
+                {
+                        m_ifp.clear();
+                        m_ifp.seekg(0, std::ios::beg);
+                        m_ifp >> r_plen >> string;
+                }
+                // convert all the char in string into a hexa
+                for (cpt = 0; cpt < (r_plen << 1) ; cpt++)
+                {
+                    string[cpt] = atox(string[cpt]);
+                    data = (data << 4)|string[cpt];
+                    if(cpt%2)
+                    {
+                        r_buffer_tmp[cpt>>1]    = data;
+                        data = 0;
+                    }
+                }
+                cpt = 0;
 
 
-        //         while (nb_bytes_available)
-        //         {
-        //             if (nb_bytes_available > 3)
-        //                 i = ((nb_words + 1)<<2) - 1;
-        //             else
-        //                 i = ((nb_words + 1)<<2) - (4 - nb_bytes_available) - 1;
-        //             while ( i >= (nb_words << 2) )
-        //             {
-        //                 r_buffer[i] = r_buffer_tmp[cpt];
-        //                 nb_bytes_available -- ;
-        //                 cpt ++ ;
-        //                 if ( i%4 == 0 )
-        //                 {
-        //                     nb_words ++ ;
-        //                     break;
-        //                 }
-        //                 else i--;
-        //             }
-        //         }
-        //         r_buffer[r_plen-4] = r_buffer_tmp[r_plen-1];
-        //         r_buffer[r_plen-3] = r_buffer_tmp[r_plen-2];
-        //         r_buffer[r_plen-2] = r_buffer_tmp[r_plen-3];
-        //         r_buffer[r_plen-1] = r_buffer_tmp[r_plen-4];
-        // }
+                while (nb_bytes_available)
+                {
+                    if (nb_bytes_available > 3)
+                        i = ((nb_words + 1)<<2) - 1;
+                    else
+                        i = ((nb_words + 1)<<2) - (4 - nb_bytes_available) - 1;
+                    while ( i >= (nb_words << 2) )
+                    {
+                        r_buffer[i] = r_buffer_tmp[cpt];
+                        nb_bytes_available -- ;
+                        cpt ++ ;
+                        if ( i%4 == 0 )
+                        {
+                            nb_words ++ ;
+                            break;
+                        }
+                        else i--;
+                    }
+                }
+                r_buffer[r_plen-4] = r_buffer_tmp[r_plen-1];
+                r_buffer[r_plen-3] = r_buffer_tmp[r_plen-2];
+                r_buffer[r_plen-2] = r_buffer_tmp[r_plen-3];
+                r_buffer[r_plen-1] = r_buffer_tmp[r_plen-4];
+        }
     }
 
 public:
@@ -257,7 +257,7 @@ public:
               uint32_t           gap )
         : m_name(name),
           m_gap(gap),
-          m_path(path.c_str())
+          m_ifp(path.c_str())
     {
         r_buffer_tmp    = new uint8_t[2048];
         r_buffer        = new uint8_t[2048];

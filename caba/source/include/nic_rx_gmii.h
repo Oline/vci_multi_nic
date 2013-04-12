@@ -29,10 +29,6 @@
  */
 
 /*************************************************************************
- * File         : gmii_tx.h
- * Date         : 01/06/2012
- * Authors      : Alain Greiner
- *************************************************************************
  * This object implements a packet receiver, acting as a PHY component,
  * and respecting the GMII protocol (one byte per cycle).
  * It writes packets in a file defined by the "path" constructor argument.
@@ -75,7 +71,7 @@ class NicRxGmii
     bool                r_fsm_gap;      // inter_packet state when true
     uint32_t            r_counter;      // cycles counter (used for both gap and plen)
     uint8_t*	        r_buffer;       // local buffer containing one packet
-    uint8_t*	        r_buffer_tmp;       // local buffer containing one packet
+    uint8_t*	        r_buffer_tmp;   // local buffer containing one packet
     uint32_t            r_plen;         // packet length (in bytes)
 
     ///////////////////////////////////////////////////////////////////
@@ -100,8 +96,9 @@ class NicRxGmii
     ///////////////////////////////////////////////////////////////////
     void read_one_packet()
     {
+        // We check that the file is open
         if (m_file)
-        {
+            {
                 uint32_t cpt = 0;
                 uint32_t data = 0;
                 uint32_t nb_words = 0;
@@ -111,53 +108,58 @@ class NicRxGmii
                 uint32_t i = 0;
 
                 m_file >> r_plen >> string;
+
+#ifdef SOCLIB_NIC_BACKEND_DEBUG
+                printf("[NIC][BACKEND][GMII][RX][%s] r_plen = %d\n", __func__, r_plen);
+#endif
+
                 nb_bytes_available = r_plen-4;
 
                 // check end of file and restart it
                 if (m_file.eof())
-                {
+                    {
                         m_file.clear();
                         m_file.seekg(0, std::ios::beg);
                         m_file >> r_plen >> string;
-                }
+                    }
                 // convert all the char in string into a hexa
                 for (cpt = 0; cpt < (r_plen << 1) ; cpt++)
-                {
-                    string[cpt] = atox(string[cpt]);
-                    data = (data << 4)|string[cpt];
-                    if(cpt%2)
                     {
-                        r_buffer_tmp[cpt>>1]    = data;
-                        data = 0;
+                        string[cpt] = atox(string[cpt]);
+                        data = (data << 4)|string[cpt];
+                        if(cpt%2)
+                            {
+                                r_buffer_tmp[cpt>>1]    = data;
+                                data = 0;
+                            }
                     }
-                }
                 cpt = 0;
 
 
                 while (nb_bytes_available)
-                {
-                    if (nb_bytes_available > 3)
-                        i = ((nb_words + 1)<<2) - 1;
-                    else
-                        i = ((nb_words + 1)<<2) - (4 - nb_bytes_available) - 1;
-                    while ( i >= (nb_words << 2) )
                     {
-                        r_buffer[i] = r_buffer_tmp[cpt];
-                        nb_bytes_available -- ;
-                        cpt ++ ;
-                        if ( i%4 == 0 )
-                        {
-                            nb_words ++ ;
-                            break;
-                        }
-                        else i--;
+                        if (nb_bytes_available > 3)
+                            i = ((nb_words + 1)<<2) - 1;
+                        else
+                            i = ((nb_words + 1)<<2) - (4 - nb_bytes_available) - 1;
+                        while ( i >= (nb_words << 2) )
+                            {
+                                r_buffer[i] = r_buffer_tmp[cpt];
+                                nb_bytes_available -- ;
+                                cpt ++ ;
+                                if ( i%4 == 0 )
+                                    {
+                                        nb_words ++ ;
+                                        break;
+                                    }
+                                else i--;
+                            }
                     }
-                }
                 r_buffer[r_plen-4] = r_buffer_tmp[r_plen-1];
                 r_buffer[r_plen-3] = r_buffer_tmp[r_plen-2];
                 r_buffer[r_plen-2] = r_buffer_tmp[r_plen-3];
                 r_buffer[r_plen-1] = r_buffer_tmp[r_plen-4];
-        }
+            }
     }
 
 public:
@@ -180,24 +182,23 @@ public:
     void get( bool*     dv,         // data valid
               bool*     er,         // data error
               uint8_t*  dt  )        // data value
-              //bool      on)         // power enable
     {
         if ( r_fsm_gap )    // inter-packet state
-        {
+            {
                 *dv = false;
                 *er = false;
                 *dt = 0;
 
                 r_counter = r_counter - 1;
 
-                if (r_counter == 0 ) // end of gap
-                {
+                if (r_counter == 0) // end of gap
+                    {
                         r_fsm_gap = false;
                         read_one_packet();
-                }
-        }
+                    }
+            }
         else    // running packet
-        {
+            {
                 *dv = true;
                 *er = false;
                 *dt = r_buffer[r_counter];
@@ -205,21 +206,21 @@ public:
                 r_counter = r_counter + 1;
 
                 if ( r_counter == r_plen ) // end of packet
-                {
+                    {
                         r_counter   = m_gap;
                         r_fsm_gap   = true;
-                }
-        }
+                    }
+            }
     } // end get()
 
     //////////////////////////////////////////////////////////////
-    // constructor open the file
+    // constructor
     //////////////////////////////////////////////////////////////
     NicRxGmii( const std::string  &name,
                const std::string  &path,
-               uint32_t           gap )
+               uint32_t           gap)
         : m_name(name),
-          m_gap( gap ),
+          m_gap(gap),
           m_file(path.c_str())
     {
         r_buffer_tmp    = new uint8_t[2048];
@@ -227,14 +228,14 @@ public:
     } // end constructor
 
     //////////////////
-    // destructor)
+    // destructor
     //////////////////
     ~NicRxGmii()
     {
         delete [] r_buffer;
         delete [] r_buffer_tmp;
         m_file.close();
-    }
+    } // end destructor
 
 }; // end NicRxGmii
 

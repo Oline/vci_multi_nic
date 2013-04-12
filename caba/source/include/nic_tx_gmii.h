@@ -23,15 +23,12 @@
  * Copyright (c) UPMC, Lip6
  *         Alain Greiner <alain.greiner@lip6.fr> July 2008
  *         Clement Devigne <clement.devigne@etu.upmc.fr>
+ *         Sylvain Leroy <sylvain.leroy@lip6.fr>
  *
  * Maintainers: alain 
  */
 
 /*************************************************************************
- * File         : nic_tx_gmii.h
- * Date         : 01/06/2012
- * Authors      : Alain Greiner
- *************************************************************************
  * This object implements a packet transmitter, acting as a PHY component,
  * and respecting the GMII protocol (one byte per cycle).
  * It writes packets in a file defined by the "path" constructor argument.
@@ -153,7 +150,7 @@ public:
     // constructor open the file
     //////////////////////////////////////////////////////////////
     NicTxGmii( const std::string  &name,
-               const std::string  &path )
+               const std::string  &path)
     : m_name(name),
       m_file(path.c_str(),std::ios::out)
     {
