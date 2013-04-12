@@ -42,6 +42,8 @@
 #include "nic_tx_channel.h"
 #include "nic_rx_gmii.h"
 #include "nic_tx_gmii.h"
+#include "nic_rx_tap.h"
+#include "nic_tx_tap.h"
 #include "generic_fifo.h"
 
 namespace soclib {
@@ -50,7 +52,7 @@ namespace caba {
 using namespace sc_core;
 
 
-template<typename vci_param>
+template<typename vci_param, typename RX, typename TX>
 class VciMultiNic
 	: public caba::BaseModule
 {
@@ -172,12 +174,13 @@ private:
     FifoMultiBuffer                         r_bp_fifo_multi;
 
     // Packet in and out
-    NicRxGmii                               r_gmii_rx;
-    NicTxGmii                               r_gmii_tx;
+    RX                                      r_backend_rx;
+    TX                                      r_backend_tx;
 
     // sructural parameters
     soclib::common::Segment			        m_segment;
     const size_t				            m_channels;		// no more than 8
+    char                                    m_macaddr[6];   // Base MAC addr
 
     // methods
     void        transition();
@@ -337,13 +340,15 @@ public:
     void print_trace(uint32_t option = 0);
 
     // Contructor
-    VciMultiNic( sc_module_name 			name,
+    VciMultiNic( sc_module_name          			name,
                  const soclib::common::IntTab 		&tgtid,
-                 const soclib::common::MappingTable 	&mt,
+
+                 const soclib::common::MappingTable	&mt,
                  const size_t				        channels,           // number of channels
-                 const char*                         rx_file_pathname,   // received packets
-                 const char*                         tx_file_pathname,   // transmitted packets
-                 const size_t                        timeout);           // max waiting cycles
+                 const char*                        rx_file_pathname,   // received packets
+                 const char*                        tx_file_pathname,   // transmitted packets
+                 const size_t                       timeout,            // max waiting cycles
+                 const char 				        *macaddr);           // Default MAC addr (channel MAC addr = default + chan_number)
 };
 
 }}
