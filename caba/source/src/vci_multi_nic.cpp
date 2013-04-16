@@ -72,6 +72,10 @@
 #include "../include/vci_multi_nic.h"
 #include "../../../include/soclib/multi_nic.h"
 
+#include <fcntl.h>
+#include <errno.h>
+
+
 namespace soclib { namespace caba {
 
 #define MAC_ADDR_LEN            6
@@ -3032,6 +3036,51 @@ tmpl(void)::print_trace(uint32_t option)
     }
 } // end print_trace()
 
+
+
+
+/////////////////////////
+tmpl(int32_t)::open_tap_fd()
+{
+    int32_t tap_fd = -1;
+
+    tap_fd = open("/dev/net/tun", O_RDWR);
+
+    if (tap_fd < 0) // error
+        {
+            std::cerr << name() << ": Unable to open /dev/net/tun" << std::endl;
+        }
+    else // we can continue
+        {
+            int flags = fcntl(tap_fd, F_GETFL, 0);
+            fcntl(tap_fd, F_SETFL, flags | O_NONBLOCK);
+
+            memset((void*)&m_tap_ifr, 0, sizeof(m_tap_ifr));
+            m_tap_ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
+            // strncpy(m_tap_ifr.ifr_name, if_name.c_str(), IFNAMSIZ); // we don't have name right now, let the kernel decide
+
+            if (ioctl(tap_fd, TUNSETIFF, (void *) &m_tap_ifr) < 0)
+                {
+                    close(tap_fd);
+                    tap_fd = -1;
+                    std::cerr << name() << ": Unable to setup tap interface, check privileges."
+#ifdef __linux__
+                              << " (try: sudo setcap cap_net_admin=eip ./system.x)"
+#endif
+                              << std::endl;
+                    return -1;
+                }
+            else
+                {
+                    std::cout << name() << ": TAP interface succesfully created.";
+                }
+        }
+    return tap_fd;
+} // end open_tap_fd
+
+
+
+
 ////////////////////////////////////////////////////////////////////
 tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
                          const soclib::common::IntTab 		    &tgtid,
@@ -3147,11 +3196,40 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
            p_rx_irq(soclib::common::alloc_elems<sc_core::sc_out<bool> >("p_rx_irq", channels)),
            p_tx_irq(soclib::common::alloc_elems<sc_core::sc_out<bool> >("p_tx_irq", channels))
 {
+    int32_t             tmp_fd = -1;
+
     assert( (vci_param::B == 4) and
             "VCI_MULTI_NIC error : The VCI DATA field must be 32 bits");
 
     assert( (channels <= 8)  and
             "VCI_MULTI_NIC error : The number of channels cannot be larger than 8");
+
+    //////////////////////////////////////////////////
+    // We get a TAP fd if no path file have been given
+    //////////////////////////////////////////////////
+    if (rx_file_pathname == NULL or tx_file_pathname == NULL)
+        tmp_fd = open_tap_fd();
+
+    if (tmp_fd < 0) // error during fd oppening, we leave
+        {
+            // assert( (tmp_fd >= 0)  and
+            //         "VCI_MULTI_NIC error : Problem opening the TAP interface");
+            std::cerr << name << ": Problem opening the TAP interface " << std::endl;
+            exit(-1);
+        }
+
+    if (rx_file_pathname == NULL)
+        {
+            r_backend_rx.set_fd(tmp_fd);
+            r_backend_rx.set_ifr(&m_tap_ifr);
+        }
+
+    if (tx_file_pathname == NULL)
+        {
+            r_backend_tx.set_fd(tmp_fd);
+            r_backend_tx.set_ifr(&m_tap_ifr);
+        }
+    ////////////////////////////////////////////////// End TAP
 
     r_rx_channel = new NicRxChannel*[channels];
     r_tx_channel = new NicTxChannel*[channels];

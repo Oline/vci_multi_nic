@@ -181,11 +181,14 @@ private:
     soclib::common::Segment			        m_segment;
     const size_t				            m_channels;		// no more than 8
     char                                    m_macaddr[6];   // Base MAC addr
+    struct ifreq                            m_tap_ifr;
 
     // methods
     void        transition();
     void        genMoore();
     uint32_t    read_register(uint32_t addr); 
+    int32_t     open_tap_fd();
+
 
 protected:
 

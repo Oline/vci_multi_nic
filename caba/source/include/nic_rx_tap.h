@@ -49,6 +49,12 @@
 #include <cstdlib>
 #include <fstream>
 
+// #include <linux/if.h>
+#include <linux/if_tun.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <net/if.h>
+#include <netinet/in.h>
 
 namespace soclib {
 namespace caba {
@@ -61,35 +67,32 @@ class NicRxTap
     // structure constants
     const std::string   m_name;
     const uint32_t	    m_gap;
-    std::ifstream       m_ifp; // named path
+    std::ifstream       m_ifp;          // named path | NOT USED HERE |
+    int32_t             m_tap_fd;       // File descriptor for the TAP interface
+    struct ifreq        *m_tap_ifr;      // TAP interface
 
     // registers
     bool                r_fsm_gap;      // inter_packet state when true
     uint32_t            r_counter;      // cycles counter (used for both gap and plen)
     uint8_t*	        r_buffer;       // local buffer containing one packet
-    uint8_t*	        r_buffer_tmp;       // local buffer containing one packet
+    // uint8_t*	        r_buffer_tmp;   // local buffer containing one packet
     uint32_t            r_plen;         // packet length (in bytes)
-
-    // members
-    uint32_t            m_tap_fd;       // File descriptor for the TAP interface
-    // struct ifreq        m_tap_ifr;      // TAP interface
-
 
     ///////////////////////////////////////////////////////////////////
     // This function is used to convert ascii to hexa.
     ///////////////////////////////////////////////////////////////////
 
-    uint8_t atox(uint8_t el)
-    {
-        if((el >= 48) and (el <= 57))
-            return (el - 48);
-        else if ((el >= 65) and (el <= 70))
-            return ((el - 65)+10);
-        else if((el >= 97) and (el <= 102))
-            return ((el-97)+10);
-        else
-            return -1;
-    }
+    // uint8_t atox(uint8_t el)
+    // {
+    //     if((el >= 48) and (el <= 57))
+    //         return (el - 48);
+    //     else if ((el >= 65) and (el <= 70))
+    //         return ((el - 65)+10);
+    //     else if((el >= 97) and (el <= 102))
+    //         return ((el-97)+10);
+    //     else
+    //         return -1;
+    // }
 
     ///////////////////////////////////////////////////////////////////
     // This function is used to read one packet from the input file
@@ -97,67 +100,87 @@ class NicRxTap
     ///////////////////////////////////////////////////////////////////
     void read_one_packet()
     {
-        if (m_ifp)
-        {
-                uint32_t cpt = 0;
-                uint32_t data = 0;
-                uint32_t nb_words = 0;
-                uint32_t nb_bytes_available;
-                //string contains a packet
-                std::string string;
-                uint32_t i = 0;
+        if (m_tap_fd)
+            {
+                r_plen = read(m_tap_fd, r_buffer, 2048);
 
-                m_ifp >> r_plen >> string;
-                nb_bytes_available = r_plen-4;
+                // uint32_t cpt = 0;
+                // uint32_t data = 0;
+                // uint32_t nb_words = 0;
+                // uint32_t nb_bytes_available;
+                // //string contains a packet
+                // std::string string;
+                // uint32_t i = 0;
 
-                // check end of file and restart it
-                if (m_ifp.eof())
-                {
-                        m_ifp.clear();
-                        m_ifp.seekg(0, std::ios::beg);
-                        m_ifp >> r_plen >> string;
-                }
+                // m_ifp >> r_plen >> string;
+                // nb_bytes_available = r_plen-4;
+
+                // // check end of file and restart it
+                // if (m_ifp.eof())
+                //     {
+                //         m_ifp.clear();
+                //         m_ifp.seekg(0, std::ios::beg);
+                //         m_ifp >> r_plen >> string;
+                //     }
                 // convert all the char in string into a hexa
-                for (cpt = 0; cpt < (r_plen << 1) ; cpt++)
-                {
-                    string[cpt] = atox(string[cpt]);
-                    data = (data << 4)|string[cpt];
-                    if(cpt%2)
-                    {
-                        r_buffer_tmp[cpt>>1]    = data;
-                        data = 0;
-                    }
-                }
-                cpt = 0;
+                // for (cpt = 0; cpt < (r_plen << 1) ; cpt++)
+                //     {
+                //         string[cpt] = atox(string[cpt]);
+                //         data = (data << 4)|string[cpt];
+                //         if(cpt%2)
+                //             {
+                //                 r_buffer_tmp[cpt>>1]    = data;
+                //                 data = 0;
+                //             }
+                //     }
+                // cpt = 0;
 
 
-                while (nb_bytes_available)
-                {
-                    if (nb_bytes_available > 3)
-                        i = ((nb_words + 1)<<2) - 1;
-                    else
-                        i = ((nb_words + 1)<<2) - (4 - nb_bytes_available) - 1;
-                    while ( i >= (nb_words << 2) )
-                    {
-                        r_buffer[i] = r_buffer_tmp[cpt];
-                        nb_bytes_available -- ;
-                        cpt ++ ;
-                        if ( i%4 == 0 )
-                        {
-                            nb_words ++ ;
-                            break;
-                        }
-                        else i--;
-                    }
-                }
-                r_buffer[r_plen-4] = r_buffer_tmp[r_plen-1];
-                r_buffer[r_plen-3] = r_buffer_tmp[r_plen-2];
-                r_buffer[r_plen-2] = r_buffer_tmp[r_plen-3];
-                r_buffer[r_plen-1] = r_buffer_tmp[r_plen-4];
-        }
+                // while (nb_bytes_available)
+                //     {
+                //         if (nb_bytes_available > 3)
+                //             i = ((nb_words + 1)<<2) - 1;
+                //         else
+                //             i = ((nb_words + 1)<<2) - (4 - nb_bytes_available) - 1;
+                //         while ( i >= (nb_words << 2) )
+                //             {
+                //                 r_buffer[i] = r_buffer_tmp[cpt];
+                //                 nb_bytes_available -- ;
+                //                 cpt ++ ;
+                //                 if ( i%4 == 0 )
+                //                     {
+                //                         nb_words ++ ;
+                //                         break;
+                //                     }
+                //                 else i--;
+                //             }
+                //     }
+
+                // // Return CRC32 because of reverse endianness
+                // r_buffer[r_plen-4] = r_buffer_tmp[r_plen-1];
+                // r_buffer[r_plen-3] = r_buffer_tmp[r_plen-2];
+                // r_buffer[r_plen-2] = r_buffer_tmp[r_plen-3];
+                // r_buffer[r_plen-1] = r_buffer_tmp[r_plen-4];
+            }
     }
 
 public:
+
+    ///////////////////////////////////////////////////////////////////
+    // This function is used to set the value of the TAP file descriptor
+    ///////////////////////////////////////////////////////////////////
+    void set_fd(int     fd)
+    {
+        m_tap_fd = fd;
+    }
+
+    ///////////////////////////////////////////////////////////////////
+    // This function is used to set the value of the TAP file descriptor
+    ///////////////////////////////////////////////////////////////////
+    void set_ifr(struct ifreq     *ifr)
+    {
+        m_tap_ifr = ifr;
+    }
 
     /////////////
     void reset()
@@ -165,7 +188,7 @@ public:
         r_fsm_gap   = true;
         r_counter   = m_gap;
         memset(r_buffer,0,2048);
-        memset(r_buffer_tmp,0,2048);
+        // memset(r_buffer_tmp,0,2048);
     }
 
     ///////////////////////////////////////////////////////////////////
@@ -177,29 +200,32 @@ public:
     void get( bool*     dv,         // data valid
               bool*     er,         // data error
               uint8_t*  dt  )        // data value
-    //bool      on)         // power enable
     {
-        if ( r_fsm_gap )    // inter-packet state
+        if (r_fsm_gap)    // inter-packet state (IFG or waiting for the next trame)
             {
                 *dv = false;
                 *er = false;
                 *dt = 0;
 
-                r_counter = r_counter - 1;
-
-                if (r_counter == 0 ) // end of gap
+                if (r_counter == 0) // end of gap - we now wait for the trame to be available
                     {
-                        r_fsm_gap = false;
                         read_one_packet();
+                        if (r_plen == 0) // no trame available on the media
+                            r_fsm_gap = true;
+                        else
+                            r_fsm_gap = false;
+
                     }
+                else
+                    r_counter--;
             }
-        else    // running packet
+        else    // start or running packet
             {
                 *dv = true;
                 *er = false;
                 *dt = r_buffer[r_counter];
 
-                r_counter = r_counter + 1;
+                r_counter++;
 
                 if ( r_counter == r_plen ) // end of packet
                     {
@@ -210,46 +236,20 @@ public:
     } // end get()
 
     //////////////////////////////////////////////////////////////
-    // constructors
+    // constructors: There are 2 constructors
     //////////////////////////////////////////////////////////////
 
-    // Create the TAP interface with name specified by the kernel
-    NicRxTap( const std::string  &name,
-              uint32_t           gap)
-        : m_name(name),
-          m_gap(gap)
-    {
+    // // Create the TAP interface with name specified by the kernel
+    // NicRxTap( const std::string  &name,
+    //           uint32_t           gap)
+    //     : m_name(name),
+    //       m_gap(gap)
+    // {
 
-        //         m_tap_fd = open("/dev/net/tun", O_RDWR);
 
-        //         if ( m_tap_fd < 0 )
-        //             {
-        //                 std::cerr << name << ": Unable to open /dev/net/tun" << std::endl;
-        //             }
-        //         else
-        //             {
-        //                 int flags = fcntl(_fd, F_GETFL, 0);
-        //                 fcntl(m_tap_fd, F_SETFL, flags | O_NONBLOCK);
-
-        //                 memset((void*)&m_tap_ifr, 0, sizeof(m_tap_ifr));
-        //                 m_tap_ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
-        //                 strncpy(m_tap_ifr.ifr_name, if_name.c_str(), IFNAMSIZ);
-
-        //                 if (ioctl(m_tap_fd, TUNSETIFF, (void *) &m_tap_ifr) < 0)
-        //                     {
-        //                         close(m_tap_fd);
-        //                         m_tap_fd = -1;
-        //                         std::cerr << name << ": Unable to setup tap interface, check privileges."
-        // #ifdef __linux__
-        //                                   << " (try: sudo setcap cap_net_admin=eip ./system.x)"
-        // #endif
-        //                                   << std::endl;
-        //                     }
-        //             }
-
-        r_buffer_tmp    = new uint8_t[2048];
-        r_buffer        = new uint8_t[2048];
-    } // end constructor
+    //     r_buffer_tmp    = new uint8_t[2048];
+    //     r_buffer        = new uint8_t[2048];
+    // } // end constructor
 
     // Create the TAP interface with name specified by user
     NicRxTap( const std::string  &name,
@@ -259,19 +259,19 @@ public:
           m_gap(gap),
           m_ifp(path.c_str())
     {
-        r_buffer_tmp    = new uint8_t[2048];
+        // r_buffer_tmp    = new uint8_t[2048];
         r_buffer        = new uint8_t[2048];
     } // end constructor
 
-//////////////////
-// destructor
-//////////////////
-~NicRxTap()
-{
-    delete [] r_buffer;
-    delete [] r_buffer_tmp;
-    // m_ifp.close();
-}
+    //////////////////
+    // destructor
+    //////////////////
+    ~NicRxTap()
+    {
+        delete [] r_buffer;
+        // delete [] r_buffer_tmp;
+        // m_ifp.close();
+    }
 
 }; // end NicRxTap
 
