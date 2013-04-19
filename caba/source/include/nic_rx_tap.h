@@ -49,6 +49,8 @@
 #include <cstdlib>
 #include <fstream>
 
+#include <errno.h>
+
 // #include <linux/if.h>
 #include <linux/if_tun.h>
 #include <sys/ioctl.h>
@@ -67,16 +69,16 @@ class NicRxTap
     // structure constants
     const std::string   m_name;
     const uint32_t	    m_gap;
-    std::ifstream       m_ifp;          // named path | NOT USED HERE |
-    int32_t             m_tap_fd;       // File descriptor for the TAP interface
+    // std::ifstream       m_ifp;          // named path | NOT USED HERE |
+    int                 m_tap_fd;       // File descriptor for the TAP interface
     struct ifreq        *m_tap_ifr;      // TAP interface
 
     // registers
     bool                r_fsm_gap;      // inter_packet state when true
-    uint32_t            r_counter;      // cycles counter (used for both gap and plen)
+    int32_t             r_counter;      // cycles counter (used for both gap and plen)
     uint8_t*	        r_buffer;       // local buffer containing one packet
     // uint8_t*	        r_buffer_tmp;   // local buffer containing one packet
-    uint32_t            r_plen;         // packet length (in bytes)
+    int32_t             r_plen;         // packet length (in bytes)
 
     ///////////////////////////////////////////////////////////////////
     // This function is used to convert ascii to hexa.
@@ -100,10 +102,29 @@ class NicRxTap
     ///////////////////////////////////////////////////////////////////
     void read_one_packet()
     {
-        if (m_tap_fd)
+        if (m_tap_fd > 0)
             {
+#ifdef SOCLIB_NIC_DEBUG
+                // printf("[NIC][%s] reading from fd : %d\n", __func__, m_tap_fd);
+#endif
                 r_plen = read(m_tap_fd, r_buffer, 2048);
-
+#ifdef SOCLIB_NIC_DEBUG
+                if (errno != EAGAIN)
+                    {
+                        if (r_plen < 0) // Error during reading
+                            {
+                                std::cerr << "[NIC]"
+                                          << "["
+                                          << m_name
+                                          << "]["
+                                          << __func__
+                                          << "] Error reading from TAP";
+                                perror(":");
+                            }
+                        else // Read OK
+                            printf("[NIC][NicRxTap][%s] reading plen = %d\n", __func__, r_plen);
+                    }
+#endif
                 // uint32_t cpt = 0;
                 // uint32_t data = 0;
                 // uint32_t nb_words = 0;
@@ -171,7 +192,21 @@ public:
     ///////////////////////////////////////////////////////////////////
     void set_fd(int     fd)
     {
+#ifdef SOCLIB_NIC_DEBUG
+        printf("[NIC][NicRxTap][%s] fd is : %d\n", __func__, fd);
+#endif
         m_tap_fd = fd;
+    }
+
+    ///////////////////////////////////////////////////////////////////
+    // This function is used to set the value of the TAP file descriptor
+    ///////////////////////////////////////////////////////////////////
+    int get_fd()
+    {
+#ifdef SOCLIB_NIC_DEBUG
+        printf("[NIC][NicRxTap][%s]\n", __func__);
+#endif
+        return m_tap_fd;
     }
 
     ///////////////////////////////////////////////////////////////////
@@ -179,12 +214,18 @@ public:
     ///////////////////////////////////////////////////////////////////
     void set_ifr(struct ifreq     *ifr)
     {
+#ifdef SOCLIB_NIC_DEBUG
+        printf("[NIC][NicRxTap][%s]\n", __func__);
+#endif
         m_tap_ifr = ifr;
     }
 
     /////////////
     void reset()
     {
+#ifdef SOCLIB_NIC_DEBUG
+        printf("[NIC][NicRxTap][%s] resetting\n", __func__);
+#endif
         r_fsm_gap   = true;
         r_counter   = m_gap;
         memset(r_buffer,0,2048);
@@ -197,9 +238,9 @@ public:
     // It is therefore written as a transition and contains a
     // two states FSM to introduce the Inter-Frame Gap waiting cycles.
     ///////////////////////////////////////////////////////////////////
-    void get( bool*     dv,         // data valid
-              bool*     er,         // data error
-              uint8_t*  dt  )        // data value
+    void get(bool*     dv,         // data valid
+             bool*     er,         // data error
+             uint8_t*  dt)        // data value
     {
         if (r_fsm_gap)    // inter-packet state (IFG or waiting for the next trame)
             {
@@ -210,7 +251,7 @@ public:
                 if (r_counter == 0) // end of gap - we now wait for the trame to be available
                     {
                         read_one_packet();
-                        if (r_plen == 0) // no trame available on the media
+                        if (r_plen <= 0) // no trame available on the media
                             r_fsm_gap = true;
                         else
                             r_fsm_gap = false;
@@ -252,13 +293,16 @@ public:
     // } // end constructor
 
     // Create the TAP interface with name specified by user
-    NicRxTap( const std::string  &name,
-              const std::string  &path,
-              uint32_t           gap )
+    NicRxTap(const std::string  &name,
+             const std::string  &path,
+             uint32_t           gap)
         : m_name(name),
           m_gap(gap),
-          m_ifp(path.c_str())
+          m_tap_fd(-1)
     {
+#ifdef SOCLIB_NIC_DEBUG
+        printf("[NIC][%s] Entering constructor\n", __func__);
+#endif
         // r_buffer_tmp    = new uint8_t[2048];
         r_buffer        = new uint8_t[2048];
     } // end constructor

@@ -352,9 +352,13 @@ public:
                  const char*                        tx_file_pathname,   // transmitted packets
                  const size_t                       timeout,            // max waiting cycles
                  const char 				        *macaddr);           // Default MAC addr (channel MAC addr = default + chan_number)
-};
 
-}}
+    ~VciMultiNic();
+
+}; // end of class VciMultiNic
+
+} // end of namespace soclib
+} // end of namespace caba
 
 #endif
 

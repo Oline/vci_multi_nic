@@ -61,7 +61,7 @@ class NicTxTap
 {
     // structure constants
     const std::string   m_name;
-    std::ofstream       m_file;
+    // std::ofstream       m_file;
     int32_t             m_tap_fd;       // File descriptor for the TAP interface
     struct ifreq        *m_tap_ifr;      // TAP interface
 
@@ -141,6 +141,9 @@ public:
     /////////////
     void reset()
     {
+#ifdef SOCLIB_NIC_DEBUG
+        printf("[NIC][NicTxTap][%s] resetting\n", __func__);
+#endif
         r_counter = 0;
         memset(r_buffer,0,2048);
     }
@@ -170,9 +173,11 @@ public:
     //////////////////////////////////////////////////////////////
     NicTxTap( const std::string  &name,
               const std::string  &path)
-        : m_name(name),
-          m_file(path.c_str(),std::ios::out)
+        : m_name(name)
     {
+#ifdef SOCLIB_NIC_DEBUG
+    printf("[NIC][%s] Entering constructor\n", __func__);
+#endif
         r_buffer        = new uint8_t[2048];
     } 
 
@@ -182,7 +187,6 @@ public:
     ~NicTxTap()
     {
         delete [] r_buffer;
-        m_file.close();
     }
 
 }; // end NicTxTap

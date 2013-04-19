@@ -558,6 +558,9 @@ tmpl(void)::transition()
                     r_channel_mac_2[i] = (m_macaddr[4] << 8) + (m_macaddr[5] + i); // MIGHT OVERFLOW !!!!!!!!!!!!!!
                 }
 
+#ifdef SOCLIB_NIC_DEBUG
+            printf("[NIC][%s] Reset done\n", __func__);
+#endif
             return;
         }
 
@@ -938,11 +941,11 @@ tmpl(void)::transition()
     ///////////////////////////////////////////////////////////////////////////
     // This RX_G2S module makes the GMII to STREAM format conversion.
     // It checks the checksum, ans signals a possible error.
-    // The input is the gmii_in module.
+    // The input is the backend_rx object.
     // The output is the rx_fifo_stream, but this fifo is only used for
     // clock boundary handling, and should never be full,
     // as the consumer (RX_DES module) read all available bytes.
-    ///////////////////////////////////////////////////////////i////////////////
+    ///////////////////////////////////////////////////////////////////////////
 
     // get data from PHY component
     bool    gmii_rx_dv;
@@ -950,6 +953,7 @@ tmpl(void)::transition()
     uint8_t gmii_rx_data;
 
 #ifdef SOCLIB_PERF_NIC
+    // Can delay the start/stop of the controller for DEBUG purpose
     if (nic_wait_start > 0 or nic_end > 800000)
         {
             gmii_rx_dv = false;
@@ -958,13 +962,22 @@ tmpl(void)::transition()
             nic_wait_start -= 1;
         }
     else
+        {
 #endif
-        r_backend_rx.get( &gmii_rx_dv,
-                       &gmii_rx_er,
-                       &gmii_rx_data);
+
+#ifdef SOCLIB_NIC_DEBUG
+            // printf("[NIC][%s] Getting packet\n", __func__);
+#endif
+            r_backend_rx.get(&gmii_rx_dv,
+                             &gmii_rx_er,
+                             &gmii_rx_data);
+#ifdef SOCLIB_NIC_DEBUG
+            // printf("[NIC][%s] Got: dv = %d, er = %d, dt = %d\n", __func__, gmii_rx_dv, gmii_rx_er, gmii_rx_data);
+#endif
 
 #ifdef SOCLIB_PERF_NIC
-    nic_end += 1;
+            nic_end += 1;
+        }
 #endif
 
     // default values for fifo commands
@@ -3044,6 +3057,10 @@ tmpl(int32_t)::open_tap_fd()
 {
     int32_t tap_fd = -1;
 
+#ifdef SOCLIB_NIC_DEBUG
+    printf("[NIC][%s] Opening TAP fd\n", __func__);
+#endif
+
     tap_fd = open("/dev/net/tun", O_RDWR);
 
     if (tap_fd < 0) // error
@@ -3055,6 +3072,9 @@ tmpl(int32_t)::open_tap_fd()
             int flags = fcntl(tap_fd, F_GETFL, 0);
             fcntl(tap_fd, F_SETFL, flags | O_NONBLOCK);
 
+#ifdef SOCLIB_NIC_DEBUG
+    printf("[NIC][%s] Converting TAP fd to TAP interface\n", __func__);
+#endif
             memset((void*)&m_tap_ifr, 0, sizeof(m_tap_ifr));
             m_tap_ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
             // strncpy(m_tap_ifr.ifr_name, if_name.c_str(), IFNAMSIZ); // we don't have name right now, let the kernel decide
@@ -3072,7 +3092,7 @@ tmpl(int32_t)::open_tap_fd()
                 }
             else
                 {
-                    std::cout << name() << ": TAP interface succesfully created.";
+                    std::cout << name() << ": TAP interface succesfully created.\n";
                 }
         }
     return tap_fd;
@@ -3198,6 +3218,10 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
 {
     int32_t             tmp_fd = -1;
 
+#ifdef SOCLIB_NIC_DEBUG
+    printf("[NIC][%s] Entering constructor\n", __func__);
+#endif
+
     assert( (vci_param::B == 4) and
             "VCI_MULTI_NIC error : The VCI DATA field must be 32 bits");
 
@@ -3207,7 +3231,10 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
     //////////////////////////////////////////////////
     // We get a TAP fd if no path file have been given
     //////////////////////////////////////////////////
-    if (rx_file_pathname == NULL or tx_file_pathname == NULL)
+#ifdef SOCLIB_NIC_DEBUG
+    //    printf("[NIC][%s] rx_file_pathname = %s and tx_file_pathname = %s\n", __func__, rx_file_pathname, tx_file_pathname);
+#endif
+    // if (rx_file_pathname == NULL or tx_file_pathname == NULL)
         tmp_fd = open_tap_fd();
 
     if (tmp_fd < 0) // error during fd oppening, we leave
@@ -3218,17 +3245,17 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
             exit(-1);
         }
 
-    if (rx_file_pathname == NULL)
-        {
+    // if (rx_file_pathname == NULL)
+    //     {
             r_backend_rx.set_fd(tmp_fd);
             r_backend_rx.set_ifr(&m_tap_ifr);
-        }
+        // }
 
-    if (tx_file_pathname == NULL)
-        {
+    // if (tx_file_pathname == NULL)
+    //     {
             r_backend_tx.set_fd(tmp_fd);
             r_backend_tx.set_ifr(&m_tap_ifr);
-        }
+        // }
     ////////////////////////////////////////////////// End TAP
 
     r_rx_channel = new NicRxChannel*[channels];
@@ -3245,12 +3272,12 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
     r_tx_dispatch_packets = new sc_signal<uint32_t>[channels];
 
     r_tx_channel_to_channel = new sc_signal<uint32_t>*[channels];
-    for ( size_t k=0 ; k < channels ; k++)
+    for ( size_t k = 0 ; k < channels ; k++)
         {
             r_tx_channel_to_channel[k] = new sc_signal<uint32_t>[channels];
         }
 
-    for ( size_t k=0 ; k < channels ; k++)
+    for ( size_t k = 0 ; k < channels ; k++)
         {
             r_rx_channel[k] = new NicRxChannel("r_rx_channel", timeout);
             r_tx_channel[k] = new NicTxChannel("r_tx_channel");
@@ -3264,6 +3291,29 @@ tmpl(/**/)::VciMultiNic( sc_core::sc_module_name 		        name,
     dont_initialize();
     sensitive << p_clk.neg();
 }
+
+tmpl(/**/)::~VciMultiNic()
+{
+    for ( size_t k = 0 ; k < m_channels ; k++)
+        {
+            delete r_rx_channel[k];
+            delete r_tx_channel[k];
+            delete r_tx_channel_to_channel[k];
+        }
+
+    delete [] r_tx_channel_to_channel;
+    delete [] r_tx_dispatch_packets;
+    delete [] r_tx_chan_tdm_timer;
+
+    delete r_channel_mac_4;
+    delete r_channel_mac_2;
+
+    delete r_rx_channel;
+    delete r_tx_channel;
+
+    close(r_backend_rx.get_fd()); // If the controller is used asynmetricly (output are gmii AND tap), then we should care more about that getter
+}
+
 }}
 
 
