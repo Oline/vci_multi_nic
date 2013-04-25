@@ -68,6 +68,8 @@
 #include <systemc>
 #include <assert.h>
 
+#include <endian.h>
+
 namespace soclib { 
 namespace caba {
 
@@ -77,21 +79,21 @@ using namespace sc_core;
 #define NIC_CONTAINER_SIZE_BYTES    NIC_CONTAINER_SIZE*4
 #define MAX_PACKET                  ((NIC_CONTAINER_SIZE_BYTES-4)/62)
 
-    // writer commands (software)
-    enum tx_channel_wcmd_t {
-        TX_CHANNEL_WCMD_NOP,       // no operation             (channel state not modified)
-        TX_CHANNEL_WCMD_WRITE,     // write one word           (channel state modified) 
-        TX_CHANNEL_WCMD_CLOSE,     // close container          (channel state modified)
-    } ;
+// writer commands (software)
+enum tx_channel_wcmd_t {
+    TX_CHANNEL_WCMD_NOP,       // no operation             (channel state not modified)
+    TX_CHANNEL_WCMD_WRITE,     // write one word           (channel state modified) 
+    TX_CHANNEL_WCMD_CLOSE,     // close container          (channel state modified)
+} ;
 
-    // reader commands (NIC)
-    enum tx_channel_rcmd_t {
-        TX_CHANNEL_RCMD_NOP,       // no operation             (channel state not modified)
-        TX_CHANNEL_RCMD_READ,      // read one word            (channel state modified)
-        TX_CHANNEL_RCMD_LAST,      // read one word            (channel state modified)
-        TX_CHANNEL_RCMD_RELEASE,   // release container        (channel state modified)
-        TX_CHANNEL_RCMD_SKIP,      // skip current packet      (channel state modified)
-    };
+// reader commands (NIC)
+enum tx_channel_rcmd_t {
+    TX_CHANNEL_RCMD_NOP,       // no operation             (channel state not modified)
+    TX_CHANNEL_RCMD_READ,      // read one word            (channel state modified)
+    TX_CHANNEL_RCMD_LAST,      // read one word            (channel state modified)
+    TX_CHANNEL_RCMD_RELEASE,   // release container        (channel state modified)
+    TX_CHANNEL_RCMD_SKIP,      // skip current packet      (channel state modified)
+};
 
 class NicTxChannel
 {
@@ -123,7 +125,7 @@ public:
         r_ptw_cont    = 0;
         r_pkt_index   = 0;
         r_sts         = 0;
-        for(k = 0;k<2;k++)
+        for (k = 0; k < 2; k++)
             memset(r_cont[r_ptr_cont], 0,NIC_CONTAINER_SIZE);
     }
 
@@ -140,85 +142,85 @@ public:
         uint32_t    k = r_ptw_cont;
 
         if ( cmd_w == TX_CHANNEL_WCMD_WRITE )       // write one container word
-        {
-            assert( (r_ptw_word < NIC_CONTAINER_SIZE) and 
-                    "ERROR in NIC_TX_CHANNEL : write pointer overflow" );
+            {
+                assert( (r_ptw_word < NIC_CONTAINER_SIZE) and 
+                        "ERROR in NIC_TX_CHANNEL : write pointer overflow" );
 
-            if ( r_sts < 2 )  // at least one empty container
-            {
-                r_cont[k][r_ptw_word]   = wdata;
-                r_ptw_word              = r_ptw_word + 1;
+                if ( r_sts < 2 )  // at least one empty container
+                    {
+                        r_cont[k][r_ptw_word]   = wdata;
+                        r_ptw_word              = r_ptw_word + 1;
+                    }
+                else
+                    {
+                        assert( "ERROR in NIC_TX_CHANNEL : illegal write request" );
+                    }
             }
-            else
-            {
-                assert( "ERROR in NIC_TX_CHANNEL : illegal write request" );
-            }
-        }
         else if ( cmd_w == TX_CHANNEL_WCMD_CLOSE ) // close the current container
-        {
-            r_ptw_word = 0;
-            r_ptw_cont = (r_ptw_cont + 1) % 2;
-            r_sts      = r_sts + 1;
-        }
+            {
+                r_ptw_word = 0;
+                r_ptw_cont = (r_ptw_cont + 1) % 2;
+                r_sts      = r_sts + 1;
+            }
 
         // RCMD register update (depends only on cmd_r)
         
         if ( cmd_r == TX_CHANNEL_RCMD_READ )       // read one packet word
-        {
-            assert( (r_ptr_word < NIC_CONTAINER_SIZE) and
-                    "ERROR in NIC_TX_CHANNEL : read pointer overflow" );
+            {
+                assert( (r_ptr_word < NIC_CONTAINER_SIZE) and
+                        "ERROR in NIC_TX_CHANNEL : read pointer overflow" );
 
-            if ( r_sts > 0 )  // at least one filled container
-            {
-                r_ptr_word               = r_ptr_word + 1;
+                if ( r_sts > 0 )  // at least one filled container
+                    {
+                        r_ptr_word               = r_ptr_word + 1;
+                    }
+                else
+                    {
+                        assert( "ERROR in NIC_TX_CHANNEL : illegal read request" );
+                    }
             }
-            else
-            {
-                assert( "ERROR in NIC_TX_CHANNEL : illegal read request" );
-            }
-        }
         else if ( cmd_r == TX_CHANNEL_RCMD_LAST )  // read last word in a packet
                                                    // and updates packet index
-        {
-            assert( (r_ptr_word < NIC_CONTAINER_SIZE) and 
-                    "ERROR in NIC_TX_CHANNEL : read pointer overflow" );
-
-            assert( (r_pkt_index < MAX_PACKET) and
-                    "ERROR in NIC_TX_CHANNEL : packet index larger than 61" );
-
-            if ( r_sts > 0 )  // at least one filled container
             {
-                r_ptr_word               = r_ptr_word + 1;
-                r_pkt_index              = r_pkt_index + 1;
-                r_ptr_first              = r_ptr_word;
+                assert( (r_ptr_word < NIC_CONTAINER_SIZE) and 
+                        "ERROR in NIC_TX_CHANNEL : read pointer overflow" );
+
+                assert( (r_pkt_index < MAX_PACKET) and
+                        "ERROR in NIC_TX_CHANNEL : packet index larger than 61" );
+
+                if ( r_sts > 0 )  // at least one filled container
+                    {
+                        r_ptr_word               = r_ptr_word + 1;
+                        r_pkt_index              = r_pkt_index + 1;
+                        r_ptr_first              = r_ptr_word;
+                    }
+                else
+                    {
+                        assert( "ERROR in NIC_TX_CHANNEL : illegal read request" );
+                    }
             }
-            else
-            {
-                assert( "ERROR in NIC_TX_CHANNEL : illegal read request" );
-            }
-        }
         else if ( cmd_r == TX_CHANNEL_RCMD_RELEASE ) // release the current container
-        {
-            r_pkt_index = 0;
-            r_ptr_word  = (MAX_PACKET/2)+1;
-            r_ptr_first  = (MAX_PACKET/2)+1;
-            memset(r_cont[r_ptr_cont], 0,NIC_CONTAINER_SIZE);
-            r_ptr_cont  = (r_ptr_cont + 1) % 2;
-            r_sts       = r_sts - 1;
-        }
+            {
+                r_pkt_index = 0;
+                r_ptr_word  = (MAX_PACKET/2)+1;
+                r_ptr_first  = (MAX_PACKET/2)+1;
+                memset(r_cont[r_ptr_cont], 0, NIC_CONTAINER_SIZE);
+                r_ptr_cont  = (r_ptr_cont + 1) % 2;
+                r_sts       = r_sts - 1;
+            }
 
         else if (cmd_r == TX_CHANNEL_RCMD_SKIP) // skip current packet
-        {
-            uint32_t plen_tmp = this->plen();
-            uint32_t words;
-            if ( (plen_tmp & 0x3) == 0 ) words = plen_tmp >> 2;
-            else                         words = (plen_tmp >> 2) + 1;
+            {
+                uint32_t plen_tmp = this->plen();
+                uint32_t words;
+                if ( (plen_tmp & 0x3) == 0 ) words = plen_tmp >> 2;
+                else                         words = (plen_tmp >> 2) + 1;
 
-            r_ptr_word = r_ptr_first + words ;
-            r_pkt_index = r_pkt_index + 1;
-            r_ptr_first              = r_ptr_word;
+                r_ptr_word = r_ptr_first + words ;
+                r_pkt_index = r_pkt_index + 1;
+                r_ptr_first              = r_ptr_word;
 
-        }
+            }
     } // end update()
 
     /////////////////////////////////////////////////////////////
@@ -238,8 +240,14 @@ public:
     { 
         bool        odd     = (r_pkt_index & 0x1);
         uint32_t    word    = (r_pkt_index / 2) + 1;
-        if ( odd ) return (r_cont[r_ptr_cont][word] >> 16);
-        else       return (r_cont[r_ptr_cont][word] & 0x0000FFFF);
+
+#ifdef SOCLIB_NIC_DEBUG
+        printf("[NIC][%s] r_pkt_index = %d\n", __func__, r_pkt_index);
+#endif
+        if (odd) //odd
+            return (r_cont[r_ptr_cont][word] >> 16);
+        else // even
+            return (r_cont[r_ptr_cont][word] & 0x0000FFFF);
     }
 
     /////////////////////////////////////////////////////////////
@@ -248,7 +256,21 @@ public:
     /////////////////////////////////////////////////////////////
     uint32_t npkt()
     { 
-        return r_cont[r_ptr_cont][0] & 0x0000FFFF;
+#ifdef SOCLIB_NIC_DEBUG
+        // Printing the actuel buffer internals values
+        for (size_t i = 0; i < 1024; i++)
+            {
+                if (i != 0)
+                    {
+                        printf(" ");
+                        if ((i % 18) == 0)
+                            printf("\n");
+                    }
+                printf("%08x", r_cont[r_ptr_cont][i]);
+            }
+        printf("\n");
+#endif
+        return (r_cont[r_ptr_cont][0] & 0x0000FFFF);
     }
 
     /////////////////////////////////////////////////////////////
@@ -274,7 +296,7 @@ public:
     // for the containers.
     //////////////////////////////////////////////////////////////
     NicTxChannel( const std::string  &name)
-    : m_name(name)
+        : m_name(name)
     {
         r_cont    = new uint32_t*[2];
         r_cont[0] = new uint32_t[NIC_CONTAINER_SIZE];

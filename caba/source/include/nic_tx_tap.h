@@ -56,6 +56,8 @@ namespace caba {
 
 using namespace sc_core;
 
+#define NIC_TX_TAP_BUFSIZE 2048
+
 ///////////////
 class NicTxTap
 {
@@ -77,7 +79,26 @@ class NicTxTap
     {
         if (m_tap_fd)
             {
-                write(m_tap_fd, &r_buffer, r_counter);
+#ifdef SOCLIB_NIC_DEBUG
+                printf("[NIC][NicTxTap][%s] writing 1 packet of %u bytes on TAP fd %d :\n", __func__, r_counter, m_tap_fd);
+#endif
+#ifdef SOCLIB_NIC_DEBUG
+                // Printing the actuel buffer internals values
+                for (size_t i = 0; i < r_counter; i++) // NIC_TX_TAP_BUFSIZE here if we want to see full buffer
+                    {
+                        if (i != 0)
+                            {
+                                if ((i % 4) == 0)
+                                    printf(" ");
+                                if ((i % 72) == 0)
+                                    printf("\n");
+                            }
+                        printf("%02x", r_buffer[i]);
+                    }
+                printf("\n");
+#endif
+
+                write(m_tap_fd, r_buffer, r_counter);
 
                 // uint32_t cpt = 0;
                 // uint32_t data = 0;
@@ -145,26 +166,32 @@ public:
         printf("[NIC][NicTxTap][%s] resetting\n", __func__);
 #endif
         r_counter = 0;
-        memset(r_buffer,0,2048);
+        memset(r_buffer, 0, NIC_TX_TAP_BUFSIZE);
     }
 
     ///////////////////////////////////////////////////////////////////
     // To reach the 1 Gbyte/s throughput, this method must be called 
     // at all cycles of a 125MHz clock.
     ///////////////////////////////////////////////////////////////////
-    void put( bool     dv,          // data valid
-              bool     er,          // data error
-              uint8_t  dt)         // data value
+    void put(bool     dv,          // data valid
+             bool     er,          // data error
+             uint8_t  dt)         // data value
     {
         if (not dv and (r_counter != 0))    // end of packet
             {
                 write_one_packet();
                 r_counter = 0;
             }
-        else if (dv)    // start or running packet
+        else
             {
-                r_buffer[r_counter] = dt;
-                r_counter           = r_counter + 1;
+                if (dv)    // start or running packet
+                    {
+#ifdef SOCLIB_NIC_DEBUG
+                        printf("[NIC][NicTxTap][%s] writing 0x%02x in r_buffer[%u]\n", __func__, dt, r_counter);
+#endif
+                        r_buffer[r_counter] = dt;
+                        r_counter           = r_counter + 1;
+                    }
             }
     } // end put()
                 
@@ -176,9 +203,9 @@ public:
         : m_name(name)
     {
 #ifdef SOCLIB_NIC_DEBUG
-    printf("[NIC][%s] Entering constructor\n", __func__);
+        printf("[NIC][%s] Entering constructor\n", __func__);
 #endif
-        r_buffer        = new uint8_t[2048];
+        r_buffer        = new uint8_t[NIC_TX_TAP_BUFSIZE];
     } 
 
     //////////////////
