@@ -200,29 +200,30 @@ public:
                     }
             }
         //////////////////////////////////////////////////////////////////////////
-        else if ( cmd_w == RX_CHANNEL_WCMD_CLOSE ) // close the current container
-            {
-                r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
-                r_ptw_word                  =  ((MAX_PACKET>>1)+1);
-                r_ptw_cont                  = (r_ptw_cont + 1) % 2;
-                r_sts                       = r_sts + 1;
-                r_pkt_index                 = 0;
-                r_timer                     = m_timeout;
-            }
+        else
+            if ( cmd_w == RX_CHANNEL_WCMD_CLOSE ) // close the current container
+                {
+                    r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
+                    r_ptw_word                  =  ((MAX_PACKET>>1)+1);
+                    r_ptw_cont                  = (r_ptw_cont + 1) % 2;
+                    r_sts                       = r_sts + 1;
+                    r_pkt_index                 = 0;
+                    r_timer                     = m_timeout;
+                }
         //////////////////////////////////////////////////////////////////////////
-        else // kind of IDLE state due to command NOP
-            {
-                // close current container if time-out
-                if ( r_timer <= 0 ) 
-                    {
-                        r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
-                        r_ptw_word                  =((MAX_PACKET>>1)+1);
-                        r_ptw_cont                  = (r_ptw_cont + 1) % 2;
-                        r_sts                       = r_sts + 1;
-                        r_pkt_index                 = 0;
-                        r_timer                     = m_timeout;
-                    }
-            }
+            else // kind of IDLE state due to command NOP
+                {
+                    // close current container if time-out
+                    if ( r_timer <= 0 ) 
+                        {
+                            r_cont[container_index][0]  = (r_ptw_word<<16) | r_pkt_index;
+                            r_ptw_word                  =((MAX_PACKET>>1)+1);
+                            r_ptw_cont                  = (r_ptw_cont + 1) % 2;
+                            r_sts                       = r_sts + 1;
+                            r_pkt_index                 = 0;
+                            r_timer                     = m_timeout;
+                        }
+                }
 
         // timer decrement if container not empty AND 1 byte has been writen
         if (r_ptw_word > ((MAX_PACKET>>1)+1) ) 

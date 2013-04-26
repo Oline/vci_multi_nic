@@ -197,7 +197,7 @@ tmpl(uint32_t)::read_register(uint32_t addr)
                                 default :
                                     {
 #ifdef SOCLIB_NIC_DEBUG
-                                        printf(" [ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
+                                        printf("[ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
 #endif
                                     }
                                 }
@@ -347,7 +347,7 @@ tmpl(uint32_t)::read_register(uint32_t addr)
                                         default :
                                             {
 #ifdef SOCLIB_NIC_DEBUG
-                                                printf(" [ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
+                                                printf("[ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
 #endif
                                             }
                                         } // end SWITCH CASE
@@ -377,7 +377,7 @@ tmpl(uint32_t)::read_register(uint32_t addr)
                                 default :
                                     {
 #ifdef SOCLIB_NIC_DEBUG
-                                        printf(" [ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
+                                        printf("[ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
 #endif
                                     }
                                 }
@@ -432,7 +432,7 @@ tmpl(uint32_t)::read_register(uint32_t addr)
                                 default :
                                     {
 #ifdef SOCLIB_NIC_DEBUG
-                                        printf(" [ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
+                                        printf("[ERR] NO READ SHOULD BE ALLOWED HERE!!!\n");
 #endif
                                     }
                                 }//end switch cell
