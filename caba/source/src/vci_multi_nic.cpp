@@ -3134,9 +3134,10 @@ tmpl(int32_t)::open_tap_fd()
                 }
             else
                 {
-                    std::cout << name() << ": TAP interface succesfully created.\n";
+                    std::cout << name() << ": TAP interface succesfully created: " << m_tap_ifr.ifr_name << "\n";
                 }
         }
+
     return tap_fd;
 } // end open_tap_fd
 

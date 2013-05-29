@@ -56,7 +56,19 @@ namespace caba {
 
 using namespace sc_core;
 
-#define NIC_TX_TAP_BUFSIZE 2048
+
+///////////////
+#define NIC_TX_TAP_BUFSIZE      2048
+
+// If this define is set to true, NO CRC32 will be sent through the TAP interface
+// If this define is set to false, CRC32 will be sent through the TAP interface
+#define NIC_TX_NO_CRC32         false
+
+#ifdef NIC_TX_NO_CRC32
+  #define NIC_TX_CRC32_SIZE     4
+#else
+  #define NIC_TX_CRC32_SIZE     0
+#endif
 
 ///////////////
 class NicTxTap
@@ -84,7 +96,8 @@ class NicTxTap
 #endif
 #ifdef SOCLIB_NIC_DEBUG
                 // Printing the actuel buffer internals values
-                for (size_t i = 0; i < r_counter; i++) // NIC_TX_TAP_BUFSIZE here if we want to see full buffer
+                // -4 is there to remove the Ethernet CRC32
+                for (size_t i = 0; i < r_counter - NIC_CRC32_SIZE; i++) // NIC_TX_TAP_BUFSIZE here if we want to see full buffer
                     {
                         if (i != 0)
                             {
@@ -97,47 +110,12 @@ class NicTxTap
                     }
                 printf("\n");
 #endif
-
-                write(m_tap_fd, r_buffer, r_counter);
-
-                // uint32_t cpt = 0;
-                // uint32_t data = 0;
-                // write in the file r_counter value
-                // m_file << (unsigned)r_counter << ' ';
-                // for (cpt = 0; cpt < (r_counter - 4) ; cpt += 4)
-                //     {
-                //         data = r_buffer[cpt];
-
-                //         if ((cpt+1) >= (r_counter-4))
-                //             {
-                //                 m_file <<std::setfill('0')<<std::setw(2)<< std::hex << data;
-                //                 break;
-                //             }
-                //         data = data | (r_buffer[cpt+1]<<8);
-                
-                //         if ((cpt+2) >= (r_counter-4))
-                //             {
-                //                 m_file <<std::setfill('0')<<std::setw(4)<< std::hex << data;
-                //                 break;
-                //             }
-                //         data = data | (r_buffer[cpt+2]<<16);
-                
-                //         if ((cpt+3) >= (r_counter-4))
-                //             {
-                //                 m_file <<std::setfill('0')<<std::setw(6)<< std::hex << data;
-                //                 break;
-                //             }
-                //         data = data | (r_buffer[cpt+3] << 24);
-
-                //         //write data from r_buffer[cpt] in the file
-                //         m_file <<std::setfill('0')<<std::setw(8)<< std::hex << data;
-                //     }
-                // data = r_buffer[r_counter-4];
-                // data = data | (r_buffer[r_counter-3]<<8);
-                // data = data | (r_buffer[r_counter-2]<<16);
-                // data = data | (r_buffer[r_counter-1]<<24);
-                // m_file <<std::setfill('0')<<std::setw(8)<< std::hex << data;
-                // m_file << std::dec << std::endl;
+                // r_buffer[r_counter - 1] = 0x00;
+                // r_buffer[r_counter - 2] = 0x00;
+                // r_buffer[r_counter - 3] = 0x00;
+                // r_buffer[r_counter - 4] = 0x00;
+                // Writing to the TAP interface
+                write(m_tap_fd, r_buffer, r_counter - NIC_CRC32_SIZE);
             }
     }
 
@@ -196,7 +174,7 @@ public:
     } // end put()
                 
     //////////////////////////////////////////////////////////////
-    // constructor open the file
+    // constructor
     //////////////////////////////////////////////////////////////
     NicTxTap( const std::string  &name,
               const std::string  &path)
