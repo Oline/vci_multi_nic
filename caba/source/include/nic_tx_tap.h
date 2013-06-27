@@ -97,7 +97,7 @@ class NicTxTap
 #ifdef SOCLIB_NIC_DEBUG
                 // Printing the actuel buffer internals values
                 // -4 is there to remove the Ethernet CRC32
-                for (size_t i = 0; i < r_counter - NIC_CRC32_SIZE; i++) // NIC_TX_TAP_BUFSIZE here if we want to see full buffer
+                for (size_t i = 0; i < r_counter - NIC_TX_CRC32_SIZE; i++) // NIC_TX_TAP_BUFSIZE here if we want to see full buffer
                     {
                         if (i != 0)
                             {
@@ -115,7 +115,7 @@ class NicTxTap
                 // r_buffer[r_counter - 3] = 0x00;
                 // r_buffer[r_counter - 4] = 0x00;
                 // Writing to the TAP interface
-                write(m_tap_fd, r_buffer, r_counter - NIC_CRC32_SIZE);
+                write(m_tap_fd, r_buffer, r_counter - NIC_TX_CRC32_SIZE);
             }
     }
 
